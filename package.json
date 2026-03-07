@@ -4,11 +4,13 @@
   "description": "毒抜きAIダッシュボード - クレーマーの暴言を穏やかなメッセージに変換するシステム",
   "scripts": {
     "postinstall": "cd frontend && npm install && cd ../backend && npm install",
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev": "concurrently --kill-others --prefix-colors \"magenta,blue\" \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev"
+    "dev:backend": "cd backend && npm run dev",
+    "predev": "lsof -ti :3000 | xargs kill -9 || true && lsof -ti :3001 | xargs kill -9 || true"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "tree-kill": "^1.2.2"
   }
 }
