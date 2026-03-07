@@ -29,7 +29,8 @@ export const useChatInput = (onMessageSent: (message: Message) => void): UseChat
 
     try {
       // APIリクエスト
-      const response = await fetch('http://localhost:3001/api/convert', {
+      // プロキシ経由でバックエンドにアクセス (/api/convert -> http://localhost:3001/api/convert)
+      const response = await fetch('/api/convert', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
