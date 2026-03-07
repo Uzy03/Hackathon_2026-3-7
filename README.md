@@ -37,25 +37,12 @@ npm install
 
 ### 開発モードでの一括起動
 
-以下のコマンドを実行すると、フロントエンド (`http://localhost:3000`) とバックエンド (`http://localhost:3001`) が同時に起動します。
+以下のコマンドを実行すると、バックエンド (`http://localhost:3001`) が起動します。
 
-```bash
-npm run dev
+```
+npm run dev:backend
 ```
 
-### 個別に起動する場合
-
-**Frontend**:
-```bash
-cd frontend
-npm run dev
-```
-
-**Backend**:
-```bash
-cd backend
-npm run dev
-```
 
 ## 📂 ディレクトリ構成
 
