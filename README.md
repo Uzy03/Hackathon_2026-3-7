@@ -15,45 +15,19 @@
 
 ### 1. 依存関係の一括インストール
 
-ルートディレクトリで以下のコマンドを実行すると、`frontend`, `backend` 両方の依存関係を一度にインストールできます。
+ルートディレクトリで `npm install` を実行するだけで、フロントエンド・バックエンド全ての依存関係がインストールされます。
 
 ```bash
-npm run install:all
-```
-
-もし個別にインストールしたい場合は、以下のように実行してください。
-
-```bash
-# フロントエンド
-cd frontend
-npm install
-
-# バックエンド
-cd ../backend
 npm install
 ```
 
 ## 💻 起動手順
 
-### 開発モードでの一括起動
+### ✅ 開発モードでの一括起動
 
 以下のコマンドを実行すると、フロントエンド (`http://localhost:3000`) とバックエンド (`http://localhost:3001`) が同時に起動します。
 
 ```bash
-npm run dev
-```
-
-### 個別に起動する場合
-
-**Frontend**:
-```bash
-cd frontend
-npm run dev
-```
-
-**Backend**:
-```bash
-cd backend
 npm run dev
 ```
 
