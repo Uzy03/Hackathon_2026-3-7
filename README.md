@@ -40,7 +40,7 @@ npm install
 以下のコマンドを実行すると、バックエンド (`http://localhost:3001`) が起動します。
 
 ```
-npm run dev:backend
+npm run dev:frontend
 ```
 
 
