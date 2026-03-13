@@ -15,17 +15,30 @@
 
 ### 1. 依存関係の一括インストール
 
-ルートディレクトリで `npm install` を実行するだけで、フロントエンド・バックエンド全ての依存関係がインストールされます。
+ルートディレクトリで `npm install` を実行すると、フロントエンド（Next.js）と開発補助ツールの依存関係がインストールされます。
 
 ```bash
 npm install
 ```
 
+### 2. Backend (Python) のセットアップ
+
+バックエンドは Python (FastAPI) です。以下を実行してください。
+
+```bash
+python -m venv backend/.venv
+source backend/.venv/bin/activate
+pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env
+```
+
+`backend/.env` に `GEMINI_API_KEY` を設定してください。
+
 ## 💻 起動手順
 
 ### ✅ 開発モードでの一括起動
 
-以下のコマンドを実行すると、フロントエンド (`http://localhost:3000`) とバックエンド (`http://localhost:3001`) が同時に起動します。
+以下のコマンドを実行すると、フロントエンド (`http://localhost:3000`) とバックエンド (`http://localhost:8000`) が同時に起動します。
 
 ```bash
 npm run dev
@@ -35,7 +48,7 @@ npm run dev
 
 ```
 .
-├── backend/          # Express APIサーバー (Mock)
+├── backend/          # Python FastAPI サーバー (Gemini 1.5 Flash)
 ├── frontend/         # Next.js アプリケーション
 │   ├── src/features  # 機能ごとに分割されたコンポーネント
 │   │   ├── chat/     # クレーマー入力チャット

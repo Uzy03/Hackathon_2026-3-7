@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "description": "毒抜きAIダッシュボード - クレーマーの暴言を穏やかなメッセージに変換するシステム",
   "scripts": {
-    "postinstall": "cd frontend && npm install && cd ../backend && npm install",
+    "postinstall": "cd frontend && npm install",
     "dev": "concurrently --kill-others --prefix-colors \"magenta,blue\" \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
-    "predev": "lsof -ti :3000 | xargs kill -9 || true && lsof -ti :3001 | xargs kill -9 || true"
+    "dev:backend": "bash -lc \"cd backend && if [ -f .venv/bin/activate ]; then source .venv/bin/activate; fi && python -m uvicorn main:app --reload --port 8000\"",
+    "predev": "lsof -ti :3000 | xargs kill -9 || true && lsof -ti :8000 | xargs kill -9 || true"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
