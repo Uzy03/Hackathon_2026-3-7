@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Message } from '../../../types';
+import { useSessionId } from '../../session/hooks/useSessionId'; // ブラウザ単位の session_id を取得して顧客識別に使う
 
 interface UseChatInputResult {
   message: string;
@@ -17,6 +18,7 @@ export const useChatInput = (onMessageSent: (message: Message) => void): UseChat
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sessionId = useSessionId(); // localStorage に保存された session_id を取得する（未初期化の間は空文字）
 
   /**
    * メッセージを送信し、APIから毒抜き結果を取得する
@@ -28,14 +30,18 @@ export const useChatInput = (onMessageSent: (message: Message) => void): UseChat
     setError(null);
 
     try {
+      if (!sessionId) { // session_id が未確定の間は送信できないためガードする
+        throw new Error('session_id is not ready'); // 開発時に原因が分かるように例外で通知する
+      } // ガード節をここで閉じる
+
       // APIリクエスト
-      // プロキシ経由でバックエンドにアクセス (/api/convert -> http://localhost:3001/api/convert)
+      // プロキシ経由でバックエンドにアクセス (/api/convert -> http://localhost:8000/api/convert)
       const response = await fetch('/api/convert', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, session_id: sessionId }), // 顧客識別のため session_id を同梱して送る
       });
 
       if (!response.ok) {
