@@ -15,20 +15,15 @@ export const MascotDisplay: React.FC<MascotDisplayProps> = ({ aggressionLevel })
   // マスコットの状態を取得 (色、震え、涙)
   const { color, shakeIntensity, isCrying } = useMascotState(aggressionLevel);
 
-  // 震えのアニメーションスタイル
-  // 乱数を使ってプルプルさせる (簡易的)
-  // 注意: Reactのレンダリング毎に再計算されるため、実際のアニメーションにはCSS animationの方が望ましいが、
-  // 今回は簡易実装としてインラインスタイルで対応
-  const shakeStyle = shakeIntensity > 0 ? {
-    transform: `translate(${Math.random() * shakeIntensity - shakeIntensity / 2}px, ${Math.random() * shakeIntensity - shakeIntensity / 2}px)`,
-    transition: 'transform 0.05s ease-in-out',
-  } : {};
+  const shakeClass =
+    shakeIntensity > 10 ? 'animate-shake-hard' :
+    shakeIntensity > 0 ? 'animate-shake' :
+    '';
 
   return (
     <div className="flex flex-col items-center justify-center h-full w-full p-4 transition-colors duration-500 ease-in-out bg-white rounded-lg shadow-lg">
       <div 
-        className="relative w-full max-w-[250px] aspect-square transition-all duration-300"
-        style={shakeStyle}
+        className={`relative w-full max-w-[250px] aspect-square transition-all duration-300 ${shakeClass}`}
       >
         {/* SVGでマスコットを描画 */}
         <svg viewBox="0 0 200 200" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
