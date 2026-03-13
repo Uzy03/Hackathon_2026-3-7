@@ -30,7 +30,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages }) => {
               {/* 元のメッセージ（デバッグ用・あるいは折りたたみ表示用） */}
               <div className="flex items-start gap-2 mb-2 text-xs text-gray-400 border-b border-gray-200 pb-2">
                 <User className="w-3 h-3 mt-0.5" />
-                <p className="line-clamp-1 italic">"{msg.original}"</p>
+                <p className="line-clamp-1 italic">{`"${msg.original}"`}</p>
                 <span className="ml-auto text-[10px] bg-red-100 text-red-600 px-1 rounded">
                   Lv.{(msg.aggressionScore * 100).toFixed(0)}
                 </span>

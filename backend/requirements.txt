@@ -1,0 +1,5 @@
+fastapi # FastAPI 本体（API サーバー）
+uvicorn # ASGI サーバー（開発/本番の起動）
+google-generativeai # Gemini API クライアント
+python-dotenv # .env から環境変数を読み込む
+pydantic # 入出力スキーマ定義とバリデーション
