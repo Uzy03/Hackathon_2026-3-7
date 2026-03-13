@@ -2,14 +2,22 @@
 
 from __future__ import annotations  # 型ヒントの前方参照を容易にする
 
-from fastapi import FastAPI, HTTPException, Query  # FastAPI 本体と例外（HTTP エラー返却）と Query を読み込む
+from fastapi import FastAPI, HTTPException, Path, Query  # FastAPI 本体と例外（HTTP エラー返却）と Path/Query を読み込む
 from fastapi.middleware.cors import CORSMiddleware  # フロントエンド連携のため CORS を設定する
 
 from typing import Optional  # 遅延初期化のために Optional を使用する
 
 from src.database import SupabaseDatabase  # Supabase 永続化ロジックを単一責任で担うクラス
 from src.gemini_engine import GeminiEngine  # Gemini 呼び出しロジックを単一責任で担うクラス
-from src.schema import ConvertRequest, ConvertResponse, CustomerStats, MessageRecord  # API の入出力スキーマを読み込む
+from src.schema import (  # API の入出力スキーマを読み込む
+    ConvertRequest,  # convert 入力を表す
+    ConvertResponse,  # convert 出力を表す
+    CustomerListItem,  # 顧客一覧の返却を表す
+    CustomerRecord,  # 顧客レコードの返却を表す
+    CustomerStats,  # 顧客統計の返却を表す
+    MessageRecord,  # メッセージ履歴の返却を表す
+    UpdateCustomerRequest,  # 顧客更新の入力を表す
+)  # import をここで閉じる
 
 
 app: FastAPI = FastAPI()  # FastAPI アプリケーションを生成する（ASGI エントリ）
@@ -19,7 +27,8 @@ app.add_middleware(  # CORS 設定をミドルウェアとして追加する
     CORSMiddleware,  # CORS ミドルウェア本体を指定する
     allow_origins=[  # 開発環境のフロントエンド origin を許可する
         "http://localhost:3000",  # Next.js dev server の標準ポートを許可する
-        "http://localhost:3002",  # ポート競合時にズレた dev server も許可する
+        "http://localhost:3001",  # クレーマー用の dev server ポートを許可する
+        "http://localhost:3002",  # 既存設定との互換のために残す
     ],  # 許可 origin の配列をここで閉じる
     allow_credentials=True,  # Cookie 等の資格情報を許可する（将来の拡張に備える）
     allow_methods=["*"],  # すべての HTTP メソッドを許可する（開発用）
@@ -101,11 +110,13 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
     except Exception as exc:  # Gemini 側の失敗を 500 として返す
         raise HTTPException(status_code=500, detail=f"Gemini 変換に失敗しました: {exc}")  # 失敗理由を返してデバッグ容易性を確保する
 
+    assistant_reply: str = "メッセージありがとうございます！"  # MVP として工務店側の返信は定型文で返す
+
     try:  # 保存は DB 依存のため例外を捕捉する
         get_database().insert_message(  # 変換結果を messages として保存する
             customer_id=customer_id,  # 顧客IDを紐づけて保存する
-            original=message,  # 元文を保存する
-            converted=gemini_output.converted,  # 変換後文を保存する
+            original=gemini_output.converted,  # 工務店側の閲覧用に毒抜きしたクライアント文を保存する
+            converted=assistant_reply,  # 工務店側の返信（MVP は定型文）を保存する
             aggression_score=gemini_output.aggressionScore,  # スコアを保存する
         )  # insert_message 呼び出しをここで閉じる
     except HTTPException as exc:  # 既に HTTP として整形済みの例外はそのまま返す
@@ -115,7 +126,7 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
 
     return ConvertResponse(  # API のレスポンススキーマに合わせて整形して返す
         original=message,  # 元の入力をそのまま返す（フロント側で表示に使用）
-        converted=gemini_output.converted,  # Gemini の毒抜き結果を返す
+        converted=assistant_reply,  # クライアント向けには工務店の返信として返す
         aggressionScore=gemini_output.aggressionScore,  # Gemini の攻撃性スコアを返す
     )  # レスポンス生成をここで閉じる
 
@@ -163,3 +174,69 @@ def list_customer_stats() -> list[CustomerStats]:  # 顧客別の統計を返す
 
     stats = get_database().list_customer_stats(limit=2000)  # 直近の messages を対象に集計する（MVP）
     return [CustomerStats.model_validate(item) for item in stats]  # Pydantic で検証して返す
+
+
+@app.get("/api/customers", response_model=list[CustomerListItem])  # 顧客一覧 API を GET で公開する
+def list_customers() -> list[CustomerListItem]:  # 工務店用の顧客一覧を返す
+    """工務店画面向けに、顧客一覧（表示名 + 統計）を返す。
+
+    Returns:
+        list[CustomerListItem]: 顧客一覧の配列。
+    """
+
+    rows = get_database().list_customers_with_stats(customer_limit=200, stats_limit=5000)  # DB から顧客一覧と統計を合成して取得する
+    return [CustomerListItem.model_validate(item) for item in rows]  # Pydantic で検証して返す
+
+
+@app.get("/api/customers/{customer_id}/messages", response_model=list[MessageRecord])  # 顧客別履歴 API を GET で公開する
+def list_customer_messages(customer_id: str = Path(..., min_length=1)) -> list[MessageRecord]:  # customer_id に紐づく履歴を返す
+    """customer_id に紐づく過去メッセージ（毒抜き済み）を返す。
+
+    Args:
+        customer_id: customers.id（UUID 文字列）。
+
+    Returns:
+        list[MessageRecord]: 履歴メッセージの配列（新しい順）。
+    """
+
+    normalized: str = customer_id.strip()  # 前後の空白を除去して検索の揺れを防ぐ
+    if not normalized:  # 空文字は識別に使えないため弾く
+        raise HTTPException(status_code=400, detail="customer_id は必須です。")  # 400 を返して呼び出し側に明示する
+
+    rows = get_database().list_messages_by_customer_id(customer_id=normalized, limit=300)  # 直近 300 件を取得する
+    result: list[MessageRecord] = []  # 返却用の配列を作る
+    for row in rows:  # Supabase の行を MessageRecord へ変換する
+        result.append(  # 1件ずつ追加する
+            MessageRecord(  # スキーマに合わせて整形する
+                id=str(row.get("id")),  # id を文字列化して渡す
+                original=str(row.get("original_text") or ""),  # 元文を渡す（DB 列: original_text）
+                converted=str(row.get("converted_text") or ""),  # 変換後文を渡す（DB 列: converted_text）
+                aggressionScore=float(row.get("aggression_score") or 0.0),  # スコアを float 化して渡す
+                createdAt=str(row.get("created_at") or ""),  # created_at を ISO 文字列として渡す
+            )  # MessageRecord の生成をここで閉じる
+        )  # append をここで閉じる
+    return result  # 整形済みの履歴を返す
+
+
+@app.patch("/api/customers/{customer_id}", response_model=CustomerRecord)  # 顧客更新 API を PATCH で公開する
+def update_customer(customer_id: str, request: UpdateCustomerRequest) -> CustomerRecord:  # 顧客表示名を更新して返す
+    """顧客の表示名を更新して返す。
+
+    Args:
+        customer_id: customers.id（UUID 文字列）。
+        request: 更新後の displayName を含むリクエスト。
+
+    Returns:
+        CustomerRecord: 更新後の顧客レコード。
+    """
+
+    normalized: str = customer_id.strip()  # ID の前後空白を除去して検索の揺れを防ぐ
+    if not normalized:  # 空文字は識別に使えないため弾く
+        raise HTTPException(status_code=400, detail="customer_id は必須です。")  # 400 を返して呼び出し側に明示する
+
+    updated = get_database().update_customer_display_name(customer_id=normalized, display_name=request.displayName)  # DB 上の display_name を更新する
+    return CustomerRecord(  # API 返却のスキーマに合わせて整形する
+        customerId=str(updated.get("id")),  # 顧客IDを入れる
+        displayName=str(updated.get("display_name") or ""),  # 表示名を入れる
+        createdAt=str(updated.get("created_at") or ""),  # 作成日時を入れる
+    )  # レスポンス生成をここで閉じる
