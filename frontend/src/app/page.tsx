@@ -1,17 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react'; // 履歴ロードのコールバックを安定化するため useCallback を使う
 import { ChatForm } from '../features/chat/components/ChatForm';
 import { MascotDisplay } from '../features/mascot/components/MascotDisplay';
 import { DebugSlider } from '../features/mascot/components/DebugSlider';
 import { MessageList } from '../features/dashboard/components/MessageList';
 import { Message } from '../types';
+import { useSessionId } from '../features/session/hooks/useSessionId'; // 履歴取得のためブラウザ単位の session_id を取得する
 
 /**
  * メインダッシュボード画面
  * 3カラムレイアウトで構成される
  */
 export default function Home() {
+  const sessionId = useSessionId(); // localStorage の session_id を取得して履歴取得に使う
   // マスコットの攻撃性レベル (0.0 - 1.0)
   const [aggressionLevel, setAggressionLevel] = useState<number>(0);
   // メッセージリスト
@@ -45,6 +47,14 @@ export default function Home() {
     */
   };
 
+  /**
+   * 初期ロードの履歴取得結果を state に反映する
+   * @param history - DB から取得した履歴メッセージ一覧
+   */
+  const handleHistoryLoaded = useCallback((history: Message[]) => { // MessageList の useEffect が無限に再実行されないように関数参照を固定する
+    setMessages((prev) => (prev.length > 0 ? prev : history)); // 既に手入力で追加されたメッセージがある場合は上書きしない
+  }, []); // setMessages は安定しているため依存配列は空でよい
+
   return (
     <div className="min-h-screen bg-gray-100 p-8 font-sans">
       <header className="mb-8 text-center">
@@ -69,7 +79,7 @@ export default function Home() {
 
         {/* 右カラム: 工務店ダッシュボード */}
         <section className="h-[400px] lg:h-full overflow-hidden">
-          <MessageList messages={messages} />
+          <MessageList messages={messages} sessionId={sessionId} onHistoryLoaded={handleHistoryLoaded} />
         </section>
       </main>
 

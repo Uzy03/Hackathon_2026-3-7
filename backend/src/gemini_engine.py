@@ -7,12 +7,14 @@ import os  # 環境変数（GEMINI_API_KEY）取得に使用する
 from typing import Any, Optional  # 型安全な実装のために使用する
 
 from dotenv import load_dotenv  # .env から環境変数を読み込む
-import google.generativeai as genai  # Gemini へのアクセスに使用する
+import requests  # Gemini REST API をタイムアウト付きで呼び出すために使用する
 
 from src.schema import GeminiOutput  # Gemini の JSON 出力を厳密に検証するために使用する
 
 
 DEFAULT_MODEL_NAME: str = "models/gemini-flash-latest"  # デフォルトで利用する Flash 系モデル名を定義する
+DEFAULT_TIMEOUT_SECONDS: float = 45.0  # Gemini 呼び出しのデフォルトタイムアウト秒を定義する
+GEMINI_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"  # Gemini Developer API のベースURLを定義する
 
 
 SYSTEM_PROMPT: str = (  # Gemini に与えるシステムプロンプトを定義する
@@ -41,23 +43,14 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
         if not api_key:  # API キー未設定は実行不能なので明示的にエラーにする
             raise RuntimeError("GEMINI_API_KEY が未設定です。backend/.env を設定してください。")  # 失敗理由を分かりやすく返す
 
-        genai.configure(api_key=api_key)  # Gemini クライアントに API キーを設定する
+        self._api_key: str = api_key  # REST API 呼び出しに使用するため API キーを保持する
 
         env_model: Optional[str] = os.getenv("GEMINI_MODEL")  # 環境変数でモデル名を指定できるようにする
         if model_name == DEFAULT_MODEL_NAME and env_model:  # デフォルト指定時のみ環境変数で上書きする
             model_name = env_model  # 環境指定のモデル名に差し替える
 
         self._model_name: str = model_name  # 利用モデル名を保持してデバッグや切替に備える
-
-        try:  # system_instruction が有効なバージョンかを試す
-            self._model = genai.GenerativeModel(  # モデルを生成し、呼び出しを高速化する
-                model_name,  # 指定のモデル名を適用する（互換性のため positional を優先する）
-                system_instruction=SYSTEM_PROMPT,  # システムプロンプトをモデルに設定する
-            )  # モデル生成をここで閉じる
-            self._use_system_instruction = True  # system_instruction が有効であることを保持する
-        except TypeError:  # system_instruction 非対応、または引数形式が異なる場合に備える
-            self._model = genai.GenerativeModel(model_name)  # system_instruction なしでモデル生成する
-            self._use_system_instruction = False  # 代替としてプロンプトを本文に埋め込む
+        self._use_system_instruction = False  # REST 呼び出しでは systemInstruction を使わず本文に埋め込む方針とする
 
     def convert(self, message: str) -> GeminiOutput:  # 入力文から Gemini の JSON 出力を得る
         """入力メッセージを Gemini に渡し、毒抜きと攻撃性スコアを返す。
@@ -70,12 +63,13 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
         """
 
         prompt: str = message  # system_instruction が使える場合は user content をそのまま渡す
-        if not self._use_system_instruction:  # system_instruction が使えない場合は本文に埋め込む
+        if not self._use_system_instruction:  # system_instruction を使わない場合は本文に埋め込む
             prompt = f"{SYSTEM_PROMPT}\n\n入力テキスト:\n{message}\n\n出力:"  # 期待形式を維持しつつプロンプトを構築する
 
-        response = self._generate_content(prompt)  # 互換性差分を吸収しつつ Gemini を呼び出す
+        timeout_raw: str = os.getenv("GEMINI_TIMEOUT_SECONDS") or ""  # 環境変数でタイムアウト秒を調整できるようにする
+        timeout_seconds: float = float(timeout_raw) if timeout_raw.strip() else DEFAULT_TIMEOUT_SECONDS  # 未指定時はデフォルト値を使う
 
-        raw_text: str = getattr(response, "text", "") or ""  # 応答テキストを安全に取得する
+        raw_text: str = self._generate_json_text(prompt=prompt, timeout_seconds=timeout_seconds)  # REST API で JSON 文字列を取得する
         parsed: dict[str, Any] = self._parse_json_like(raw_text)  # JSON として解釈可能な形にパースする
 
         output: GeminiOutput = GeminiOutput.model_validate(parsed)  # Pydantic で型検証し、崩れた出力を弾く
@@ -84,31 +78,56 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
 
         return output  # 正規化した結果を返す
 
-    def _generate_content(self, prompt: str) -> Any:  # Gemini 呼び出しを互換性を考慮して実行する
-        """Gemini の generate_content を互換性を考慮して呼び出す。
+    def _generate_json_text(self, prompt: str, timeout_seconds: float) -> str:  # Gemini REST API で JSON 文字列を取得する
+        """Gemini REST API を呼び出し、応答テキスト（JSON 文字列）を返す。
 
         Args:
             prompt: Gemini に渡す入力プロンプト。
+            timeout_seconds: HTTP 通信のタイムアウト秒。
 
         Returns:
-            Any: SDK が返すレスポンスオブジェクト。
+            str: Gemini の応答テキスト（JSON 文字列想定）。
         """
 
-        try:  # まずは JSON を強く促す設定で呼び出す
-            return self._model.generate_content(  # Gemini を呼び出す
-                prompt,  # 入力テキスト（あるいはシステムプロンプト込み）を渡す
-                generation_config={  # 生成設定を指定して出力の安定性を高める
-                    "temperature": 0.2,  # 逸脱を減らし JSON 破綻を抑える
-                    "response_mime_type": "application/json",  # 可能なら JSON での応答を促す
-                },  # 生成設定をここで閉じる
-            )  # 呼び出しをここで閉じる
-        except TypeError:  # response_mime_type 等が未対応の場合があるためフォールバックする
-            return self._model.generate_content(  # JSON mime 指定なしで再試行する
-                prompt,  # 入力プロンプトをそのまま渡す
-                generation_config={  # 生成設定を最小限にする
-                    "temperature": 0.2,  # 逸脱を減らし JSON 破綻を抑える
-                },  # 生成設定をここで閉じる
-            )  # 呼び出しをここで閉じる
+        url: str = f"{GEMINI_API_BASE_URL}/{self._model_name}:generateContent"  # generateContent のエンドポイントを組み立てる
+        params: dict[str, str] = {"key": self._api_key}  # API キーはクエリとして付与する（Developer API 仕様）
+        payload: dict[str, Any] = {  # generateContent のリクエストボディを構築する
+            "contents": [  # LLM に渡すコンテンツ配列を定義する
+                {  # 1 つ目の user メッセージを定義する
+                    "role": "user",  # ロールを user として扱う
+                    "parts": [{"text": prompt}],  # テキスト本文として prompt を渡す
+                }  # 1 つ目のメッセージ定義をここで閉じる
+            ],  # contents 配列をここで閉じる
+            "generationConfig": {  # 生成設定を指定して出力の安定性を高める
+                "temperature": 0.2,  # 逸脱を減らし JSON 破綻を抑える
+                "responseMimeType": "application/json",  # 可能なら JSON での応答を促す
+            },  # generationConfig をここで閉じる
+        }  # payload 定義をここで閉じる
+
+        response = requests.post(  # HTTP POST で Gemini を呼び出す
+            url,  # エンドポイント URL を指定する
+            params=params,  # API キーのクエリを付与する
+            json=payload,  # JSON ボディを送信する
+            timeout=timeout_seconds,  # 応答待ちの上限秒数を指定してハングを防ぐ
+        )  # リクエスト呼び出しをここで閉じる
+
+        response.raise_for_status()  # 4xx/5xx を例外化して呼び出し側で扱えるようにする
+
+        data: dict[str, Any] = response.json()  # 応答 JSON を辞書として取得する
+        candidates: list[Any] = list(data.get("candidates") or [])  # candidates 配列を安全に取り出す
+        if not candidates:  # 候補がない場合は異常として扱う
+            raise RuntimeError("Gemini 応答に candidates がありません。")  # 失敗理由を明示する
+
+        content: dict[str, Any] = dict(candidates[0].get("content") or {})  # 先頭候補の content を取り出す
+        parts: list[Any] = list(content.get("parts") or [])  # parts 配列を取り出す
+        if not parts:  # parts がない場合は異常として扱う
+            raise RuntimeError("Gemini 応答に parts がありません。")  # 失敗理由を明示する
+
+        text: str = str(parts[0].get("text") or "")  # parts[0].text を文字列として取り出す
+        if not text.strip():  # 空文字の場合は異常として扱う
+            raise RuntimeError("Gemini 応答テキストが空です。")  # 失敗理由を明示する
+
+        return text  # JSON 文字列を返す
 
     def _parse_json_like(self, text: str) -> dict[str, Any]:  # JSON を頑健にパースする補助関数
         """Gemini 応答から JSON を抽出して辞書に変換する。
