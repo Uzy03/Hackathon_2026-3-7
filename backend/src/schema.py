@@ -100,3 +100,63 @@ class CustomerStats(BaseModel):  # 顧客別統計の 1 行を表す
         None,  # メッセージが無い顧客は None になりうる
         description="顧客の最終送信日時（ISO 文字列）",  # ドキュメント用途の説明
     )  # フィールド定義をここで閉じる
+
+
+class CustomerRecord(BaseModel):  # customers テーブルの 1 レコードを表す
+    """customers テーブルの 1 レコード（工務店側の一覧/詳細表示用）を表すモデル。"""
+
+    customerId: str = Field(  # customers.id を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客ID（customers.id）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    displayName: str = Field(  # customers.display_name を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客表示名（暫定名を含む）",  # ドキュメント用途の説明
+        min_length=1,  # 空文字を弾いて表示の破綻を防ぐ
+    )  # フィールド定義をここで閉じる
+    createdAt: str = Field(  # customers.created_at を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客作成日時（ISO 文字列）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+
+
+class CustomerListItem(BaseModel):  # 工務店の顧客一覧に必要な集計情報を含むモデル
+    """工務店画面の顧客一覧に必要な情報（表示名+統計）を表すモデル。"""
+
+    customerId: str = Field(  # 顧客IDを保持する
+        ...,  # 必須項目であることを示す
+        description="顧客ID（customers.id）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    displayName: str = Field(  # 顧客表示名を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客表示名（暫定名を含む）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    avgAggressionScore: float = Field(  # 平均攻撃性スコアを保持する
+        ...,  # 必須項目であることを示す
+        description="顧客の平均攻撃性スコア",  # ドキュメント用途の説明
+        ge=0.0,  # 範囲外の値を弾いて整合性を守る
+        le=1.0,  # 範囲外の値を弾いて整合性を守る
+    )  # フィールド定義をここで閉じる
+    messageCount: int = Field(  # 累計メッセージ数を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客の累計メッセージ数",  # ドキュメント用途の説明
+        ge=0,  # 負の件数を弾いて整合性を守る
+    )  # フィールド定義をここで閉じる
+    lastMessageAt: str | None = Field(  # 最終送信日時を保持する
+        None,  # メッセージが無い顧客は None になりうる
+        description="顧客の最終送信日時（ISO 文字列）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    createdAt: str = Field(  # 顧客作成日時を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客作成日時（ISO 文字列）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+
+
+class UpdateCustomerRequest(BaseModel):  # 顧客表示名の更新リクエストを表す
+    """顧客表示名の更新リクエストを表すモデル。"""
+
+    displayName: str = Field(  # 新しい表示名を保持する
+        ...,  # 必須項目であることを示す
+        description="更新後の顧客表示名",  # ドキュメント用途の説明
+        min_length=1,  # 空文字を弾いて表示の破綻を防ぐ
+    )  # フィールド定義をここで閉じる
