@@ -4,10 +4,15 @@
   "description": "毒抜きAIダッシュボード - クレーマーの暴言を穏やかなメッセージに変換するシステム",
   "scripts": {
     "postinstall": "cd frontend && npm install",
-    "dev": "concurrently --kill-others --prefix-colors \"magenta,blue\" \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev": "concurrently --kill-others --prefix-colors \"magenta,blue,cyan\" \"npm run dev:frontend:admin\" \"npm run dev:frontend:client\" \"npm run dev:backend\"",
+    "dev:client": "concurrently --kill-others --prefix-colors \"magenta,blue\" \"npm run dev:frontend:client\" \"npm run dev:backend\"",
+    "dev:admin": "concurrently --kill-others --prefix-colors \"magenta,blue\" \"npm run dev:frontend:admin\" \"npm run dev:backend\"",
+    "dev:split": "concurrently --kill-others --prefix-colors \"magenta,blue,cyan\" \"npm run dev:frontend:client\" \"npm run dev:frontend:admin\" \"npm run dev:backend\"",
     "dev:frontend": "cd frontend && npm run dev",
+    "dev:frontend:client": "cd frontend && npm run dev:client",
+    "dev:frontend:admin": "cd frontend && npm run dev:admin",
     "dev:backend": "bash -lc \"cd backend && if [ -f .venv/bin/activate ]; then source .venv/bin/activate; fi && python -m uvicorn main:app --reload --port 8000\"",
-    "predev": "lsof -ti :3000 | xargs kill -9 || true && lsof -ti :8000 | xargs kill -9 || true"
+    "predev": "lsof -ti :3000 | xargs kill -9 || true && lsof -ti :3001 | xargs kill -9 || true && lsof -ti :8000 | xargs kill -9 || true"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

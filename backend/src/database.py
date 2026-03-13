@@ -227,6 +227,101 @@ class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラ�
         stats.sort(key=lambda x: (x.get("lastMessageAt") or ""), reverse=True)  # 最終日時の新しい順に並べ替える
         return stats  # 統計一覧を返す
 
+    def list_customers(self, limit: int = 200) -> list[dict[str, Any]]:  # customers の一覧を返す
+        """customers テーブルの一覧を取得して返す。
+
+        Args:
+            limit: 取得件数の上限（デフォルト 200）。
+
+        Returns:
+            list[dict[str, Any]]: customers の行データ（辞書）の配列。
+        """
+
+        result = (  # customers を取得する
+            self._client  # Supabase クライアントを参照する
+            .table("customers")  # customers テーブルを対象にする
+            .select("id, display_name, created_at")  # 工務店一覧に必要な列のみ取得する
+            .order("created_at", desc=True)  # 新しい顧客順に並べる
+            .limit(int(limit))  # 上限件数を適用する
+            .execute()  # クエリを実行する
+        )  # 取得結果をここで閉じる
+
+        return list(result.data or [])  # data が None の場合も空配列で返す
+
+    def list_customers_with_stats(self, customer_limit: int = 200, stats_limit: int = 5000) -> list[dict[str, Any]]:  # 顧客一覧に統計を合成して返す
+        """工務店用の顧客一覧（表示名 + 統計）を返す。
+
+        Args:
+            customer_limit: customers 取得件数の上限。
+            stats_limit: 統計計算に使う messages 取得件数の上限。
+
+        Returns:
+            list[dict[str, Any]]: CustomerListItem 互換の辞書配列。
+        """
+
+        customers: list[dict[str, Any]] = self.list_customers(limit=customer_limit)  # customers を取得する
+        stats: list[dict[str, Any]] = self.list_customer_stats(limit=stats_limit)  # messages から統計を取得する
+
+        by_customer_id: dict[str, dict[str, Any]] = {str(s.get("customerId")): s for s in stats}  # 統計を customerId で索引化する
+
+        merged: list[dict[str, Any]] = []  # 返却用の配列を作る
+        for c in customers:  # customers を走査して統計を合成する
+            cid: str = str(c.get("id"))  # customers.id を文字列化する
+            display_name: str = str(c.get("display_name") or "匿名顧客")  # 表示名が無い場合の既定値を用意する
+            created_at: str = str(c.get("created_at") or "")  # created_at を文字列として保持する
+
+            stat: dict[str, Any] = by_customer_id.get(cid) or {}  # 統計が無い顧客は空辞書として扱う
+            merged.append(  # 合成結果を 1 行として追加する
+                {  # API 返却のキーを camelCase で統一する
+                    "customerId": cid,  # 顧客IDを入れる
+                    "displayName": display_name,  # 顧客表示名を入れる
+                    "avgAggressionScore": float(stat.get("avgAggressionScore") or 0.0),  # 平均スコアを入れる（無ければ 0）
+                    "messageCount": int(stat.get("messageCount") or 0),  # 件数を入れる（無ければ 0）
+                    "lastMessageAt": stat.get("lastMessageAt") or None,  # 最終日時を入れる（無ければ None）
+                    "createdAt": created_at,  # 顧客作成日時も入れて並び替えや詳細表示に使えるようにする
+                }  # 行定義をここで閉じる
+            )  # append をここで閉じる
+
+        merged.sort(  # 最終メッセージ日時の新しい順で並べる
+            key=lambda x: (x.get("lastMessageAt") or x.get("createdAt") or ""),  # 最終日時が無い場合は作成日時で代替する
+            reverse=True,  # 新しい順にする
+        )  # sort をここで閉じる
+
+        return merged  # 合成済みの一覧を返す
+
+    def update_customer_display_name(self, customer_id: str, display_name: str) -> dict[str, Any]:  # 顧客表示名を更新して返す
+        """customers.display_name を更新して更新後レコードを返す。
+
+        Args:
+            customer_id: customers.id（UUID 文字列）。
+            display_name: 更新後の表示名。
+
+        Returns:
+            dict[str, Any]: 更新後の customers レコード（辞書）。
+        """
+
+        normalized_id: str = customer_id.strip()  # ID の前後空白を除去する
+        normalized_name: str = display_name.strip()  # 表示名の前後空白を除去する
+        if not normalized_id:  # 空文字の ID は更新できないため弾く
+            raise ValueError("customer_id は必須です。")  # 呼び出し側に入力不正を通知する
+        if not normalized_name:  # 空文字の表示名は更新できないため弾く
+            raise ValueError("display_name は必須です。")  # 呼び出し側に入力不正を通知する
+
+        updated = (  # 更新を実行する
+            self._client  # Supabase クライアントを参照する
+            .table("customers")  # customers テーブルを対象にする
+            .update({"display_name": normalized_name})  # display_name を更新する
+            .eq("id", normalized_id)  # 対象 ID に絞る
+            .select("id, display_name, created_at")  # 更新後レコードを返してもらう
+            .limit(1)  # 1件のみで十分なので制限する
+            .execute()  # クエリを実行する
+        )  # 更新結果をここで閉じる
+
+        if not updated.data or len(updated.data) == 0:  # 更新対象が無い場合は異常とする
+            raise RuntimeError("customers の更新に失敗しました。")  # 原因を明示して呼び出し側で扱えるようにする
+
+        return dict(updated.data[0])  # 更新後レコードを辞書として返す
+
     def _parse_datetime(self, value: str) -> Optional[datetime]:  # ISO 文字列を datetime に変換する
         """Supabase の created_at（ISO 文字列）を datetime に変換する。
 

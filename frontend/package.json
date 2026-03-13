@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:client": "NEXT_PUBLIC_APP_MODE=client NEXT_DIST_DIR=.next-client next dev -p 3001",
+    "dev:admin": "NEXT_PUBLIC_APP_MODE=admin NEXT_DIST_DIR=.next-admin next dev -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
