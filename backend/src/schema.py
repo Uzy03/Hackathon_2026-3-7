@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field  # Pydantic の基底クラスとフィー
 class ConvertRequest(BaseModel):  # /api/convert の入力スキーマを表す
     """/api/convert のリクエストボディ（入力）を表すモデル。"""
 
+    session_id: str = Field(  # 顧客識別のためのセッションIDを保持する
+        ...,  # 必須項目であることを示す
+        description="ブラウザ単位のセッションID（顧客識別用）",  # API ドキュメント用の説明を付与する
+        min_length=1,  # 空文字を弾いて顧客識別の破綻を防ぐ
+    )  # フィールド定義をここで閉じる
     message: str = Field(  # クレーマーの入力テキストを保持する
         ...,  # 必須項目であることを示す
         description="クレーマー入力（生テキスト）",  # API ドキュメント用の説明を付与する
@@ -43,4 +48,55 @@ class ConvertResponse(BaseModel):  # /api/convert の出力スキーマを表す
         description="攻撃性スコア（0.0=冷静〜1.0=激昂）",  # ドキュメント用途の説明
         ge=0.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
         le=1.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+    )  # フィールド定義をここで閉じる
+
+
+class MessageRecord(BaseModel):  # messages テーブルから返す 1 件のメッセージを表す
+    """messages テーブルの 1 レコード（履歴表示用）を表すモデル。"""
+
+    id: str = Field(  # messages.id を保持する
+        ...,  # 必須項目であることを示す
+        description="メッセージID（UUID）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    original: str = Field(  # 元のメッセージを保持する
+        ...,  # 必須項目であることを示す
+        description="元のメッセージ（クレーマー入力）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    converted: str = Field(  # 変換後のメッセージを保持する
+        ...,  # 必須項目であることを示す
+        description="毒抜き後の丁寧なビジネス敬語メッセージ",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    aggressionScore: float = Field(  # 攻撃性スコアを保持する
+        ...,  # 必須項目であることを示す
+        description="攻撃性スコア（0.0=冷静〜1.0=激昂）",  # ドキュメント用途の説明
+        ge=0.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+        le=1.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+    )  # フィールド定義をここで閉じる
+    createdAt: str = Field(  # 作成日時を保持する
+        ...,  # 必須項目であることを示す
+        description="作成日時（ISO 文字列）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+
+
+class CustomerStats(BaseModel):  # 顧客別統計の 1 行を表す
+    """顧客ごとの統計（平均スコア/件数/最終日時）を表すモデル。"""
+
+    customerId: str = Field(  # 顧客IDを保持する
+        ...,  # 必須項目であることを示す
+        description="顧客ID（customers.id）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    avgAggressionScore: float = Field(  # 平均攻撃性スコアを保持する
+        ...,  # 必須項目であることを示す
+        description="顧客の平均攻撃性スコア",  # ドキュメント用途の説明
+        ge=0.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+        le=1.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+    )  # フィールド定義をここで閉じる
+    messageCount: int = Field(  # 累計メッセージ数を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客の累計メッセージ数",  # ドキュメント用途の説明
+        ge=0,  # 負の件数を弾いて整合性を守る
+    )  # フィールド定義をここで閉じる
+    lastMessageAt: str | None = Field(  # 最終送信日時を保持する
+        None,  # メッセージが無い顧客は None になりうる
+        description="顧客の最終送信日時（ISO 文字列）",  # ドキュメント用途の説明
     )  # フィールド定義をここで閉じる
