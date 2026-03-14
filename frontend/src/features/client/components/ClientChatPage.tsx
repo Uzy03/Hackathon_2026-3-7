@@ -11,6 +11,10 @@ import { useClientChatState } from '../hooks/useClientChatState'; // クレー�
  */
 export const ClientChatPage: React.FC = () => {
   const { messages, aggressionLevel, isHistoryLoading, historyError, onMessageSent } = useClientChatState(); // 画面に必要な state と操作をまとめて取得する
+  const [isSending, setIsSending] = React.useState(false); // メッセージ送信中の状態を管理
+
+  // ローディング状態を統合（履歴取得中またはメッセージ送信中）
+  const isLoading = isHistoryLoading || isSending;
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans flex flex-col relative">
@@ -27,7 +31,7 @@ export const ClientChatPage: React.FC = () => {
       <div className="fixed right-4 top-20 z-50 bg-white/90 backdrop-blur border border-gray-200 rounded-2xl shadow-xl px-4 py-3 flex items-center gap-4">
         <div className="w-44 h-28 flex items-center justify-center">
           <div className="scale-125 origin-center">
-            <MascotDisplay aggressionLevel={aggressionLevel} />
+            <MascotDisplay aggressionLevel={aggressionLevel} isLoading={isLoading} />
           </div>
         </div>
         <div className="min-w-[120px]">
@@ -37,7 +41,11 @@ export const ClientChatPage: React.FC = () => {
       </div>
 
       <ClientChatTimeline messages={messages} isHistoryLoading={isHistoryLoading} />
-      <ClientChatComposer onMessageSent={onMessageSent} errorMessage={historyError} />
+      <ClientChatComposer 
+        onMessageSent={onMessageSent} 
+        errorMessage={historyError} 
+        onLoadingChange={setIsSending}
+      />
     </div>
   );
 };
