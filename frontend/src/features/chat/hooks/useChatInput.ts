@@ -55,13 +55,14 @@ export const useChatInput = (onMessageSent: (message: Message) => void): UseChat
         id: crypto.randomUUID(),
         original: data.original,
         converted: data.converted,
+        replySuggestion: data.replySuggestion,
         timestamp: Date.now(),
         aggressionScore: data.aggressionScore,
       };
 
       // コールバックを呼び出す
       onMessageSent(newMessage);
-      
+
       // 入力をクリア
       setMessage('');
     } catch (err) {

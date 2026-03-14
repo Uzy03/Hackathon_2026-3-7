@@ -110,13 +110,17 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
     except Exception as exc:  # Gemini 側の失敗を 500 として返す
         raise HTTPException(status_code=500, detail=f"Gemini 変換に失敗しました: {exc}")  # 失敗理由を返してデバッグ容易性を確保する
 
-    assistant_reply: str = "メッセージありがとうございます！"  # MVP として工務店側の返信は定型文で返す
+    import json
+    combined_payload = json.dumps({
+        "converted": gemini_output.converted,
+        "replySuggestion": gemini_output.replySuggestion
+    }, ensure_ascii=False)
 
     try:  # 保存は DB 依存のため例外を捕捉する
         get_database().insert_message(  # 変換結果を messages として保存する
             customer_id=customer_id,  # 顧客IDを紐づけて保存する
-            original=gemini_output.converted,  # 工務店側の閲覧用に毒抜きしたクライアント文を保存する
-            converted=assistant_reply,  # 工務店側の返信（MVP は定型文）を保存する
+            original=message,  # トータルの保存: クレーマーの生の文章を保存する
+            converted=combined_payload,  # JSON化して一つのカラムに押し込む
             aggression_score=gemini_output.aggressionScore,  # スコアを保存する
         )  # insert_message 呼び出しをここで閉じる
     except HTTPException as exc:  # 既に HTTP として整形済みの例外はそのまま返す
@@ -126,8 +130,9 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
 
     return ConvertResponse(  # API のレスポンススキーマに合わせて整形して返す
         original=message,  # 元の入力をそのまま返す（フロント側で表示に使用）
-        converted=assistant_reply,  # クライアント向けには工務店の返信として返す
+        converted=gemini_output.converted,  # 毒抜きされたテキストを返す
         aggressionScore=gemini_output.aggressionScore,  # Gemini の攻撃性スコアを返す
+        replySuggestion=gemini_output.replySuggestion,  # 返信案を返す
     )  # レスポンス生成をここで閉じる
 
 
@@ -149,15 +154,28 @@ def list_messages(session_id: str = Query(..., min_length=1)) -> list[MessageRec
     customer_id: str = get_database().get_or_create_customer_id(normalized)  # 顧客が無い場合は作成しつつIDを確定する
     rows = get_database().list_messages_by_customer_id(customer_id=customer_id, limit=200)  # 直近 200 件を取得する
 
+    import json
     result: list[MessageRecord] = []  # 返却用の配列を作る
     for row in rows:  # Supabase の行を MessageRecord へ変換する
+        raw_converted = str(row.get("converted_text") or "")
+        converted_text = raw_converted
+        reply_suggestion = ""
+        if raw_converted.startswith("{") and raw_converted.endswith("}"):
+            try:
+                parsed = json.loads(raw_converted)
+                converted_text = parsed.get("converted", raw_converted)
+                reply_suggestion = parsed.get("replySuggestion", "")
+            except json.JSONDecodeError:
+                pass
+
         result.append(  # 1件ずつ追加する
             MessageRecord(  # スキーマに合わせて整形する
                 id=str(row.get("id")),  # id を文字列化して渡す
-                original=str(row.get("original_text") or ""),  # 元文を渡す（DB 列: original_text）
-                converted=str(row.get("converted_text") or ""),  # 変換後文を渡す（DB 列: converted_text）
+                original=str(row.get("original_text") or ""),  # 生メッセージ
+                converted=converted_text,  # 抽出した毒抜き文
                 aggressionScore=float(row.get("aggression_score") or 0.0),  # スコアを float 化して渡す
                 createdAt=str(row.get("created_at") or ""),  # created_at を ISO 文字列として渡す
+                replySuggestion=reply_suggestion, # 抽出した返信案
             )  # MessageRecord の生成をここで閉じる
         )  # append をここで閉じる
 
@@ -204,15 +222,28 @@ def list_customer_messages(customer_id: str = Path(..., min_length=1)) -> list[M
         raise HTTPException(status_code=400, detail="customer_id は必須です。")  # 400 を返して呼び出し側に明示する
 
     rows = get_database().list_messages_by_customer_id(customer_id=normalized, limit=300)  # 直近 300 件を取得する
+    import json
     result: list[MessageRecord] = []  # 返却用の配列を作る
     for row in rows:  # Supabase の行を MessageRecord へ変換する
+        raw_converted = str(row.get("converted_text") or "")
+        converted_text = raw_converted
+        reply_suggestion = ""
+        if raw_converted.startswith("{") and raw_converted.endswith("}"):
+            try:
+                parsed = json.loads(raw_converted)
+                converted_text = parsed.get("converted", raw_converted)
+                reply_suggestion = parsed.get("replySuggestion", "")
+            except json.JSONDecodeError:
+                pass
+
         result.append(  # 1件ずつ追加する
             MessageRecord(  # スキーマに合わせて整形する
                 id=str(row.get("id")),  # id を文字列化して渡す
-                original=str(row.get("original_text") or ""),  # 元文を渡す（DB 列: original_text）
-                converted=str(row.get("converted_text") or ""),  # 変換後文を渡す（DB 列: converted_text）
+                original=str(row.get("original_text") or ""),  # 元文
+                converted=converted_text,  # 抽出した毒抜き文
                 aggressionScore=float(row.get("aggression_score") or 0.0),  # スコアを float 化して渡す
                 createdAt=str(row.get("created_at") or ""),  # created_at を ISO 文字列として渡す
+                replySuggestion=reply_suggestion, # 抽出した返信案
             )  # MessageRecord の生成をここで閉じる
         )  # append をここで閉じる
     return result  # 整形済みの履歴を返す
