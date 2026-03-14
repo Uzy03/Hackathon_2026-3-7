@@ -33,10 +33,10 @@ export const ClientChatTimeline: React.FC<ClientChatTimelineProps> = ({ messages
             </div>
           </div>
 
-          <div className="flex justify-start">
-            <div className={clsx('max-w-[80%] rounded-2xl px-4 py-2 shadow-sm border', 'bg-white text-gray-800 border-gray-200')}>
-              <p className="text-xs text-gray-400 mb-1">工務店（AI）</p>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.converted}</p>
+          <div className="flex justify-start space-x-2">
+            <div className={clsx('max-w-[48%] rounded-2xl px-4 py-2 shadow-sm border', 'bg-white text-gray-800 border-gray-200')}>
+              <p className="text-xs text-blue-500 mb-1">工務店（AI返信案）</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.replySuggestion || '（返信案がありません）'}</p>
             </div>
           </div>
         </div>

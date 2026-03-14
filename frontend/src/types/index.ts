@@ -10,6 +10,8 @@ export interface Message {
   original: string; // クレーマーの原文を表す
   /** 毒抜き後のメッセージ */
   converted: string; // 工務店側に提示する丁寧文面を表す
+  /** 工務店側の返信案 */
+  replySuggestion?: string; // 生成された返信案（過去データ互換のためオプショナル）
   /** メッセージが送信された時刻のタイムスタンプ */
   timestamp: number; // 表示用の時刻を表す UNIX ミリ秒を保持する
   /** DB上の作成日時（履歴から取得する場合のみ） */

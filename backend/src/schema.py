@@ -30,6 +30,11 @@ class GeminiOutput(BaseModel):  # Gemini からの JSON 出力を厳密に受け
         description="毒抜き変換後の丁寧なビジネス敬語メッセージ",  # ドキュメント用途の説明
         min_length=1,  # 空出力を弾いて UI 破綻を防ぐ
     )  # フィールド定義をここで閉じる
+    replySuggestion: str = Field(  # 工務店側の返信案を表す
+        ...,  # 必須項目であることを示す
+        description="工務店側の返信案",  # ドキュメント用途の説明
+        min_length=1,  # 空文字を弾く
+    )  # フィールド定義をここで閉じる
 
 
 class ConvertResponse(BaseModel):  # /api/convert の出力スキーマを表す
@@ -48,6 +53,10 @@ class ConvertResponse(BaseModel):  # /api/convert の出力スキーマを表す
         description="攻撃性スコア（0.0=冷静〜1.0=激昂）",  # ドキュメント用途の説明
         ge=0.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
         le=1.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+    )  # フィールド定義をここで閉じる
+    replySuggestion: str = Field(  # 工務店側の返信案を返す
+        ...,  # 必須項目であることを示す
+        description="工務店側の返信案",  # ドキュメント用途の説明
     )  # フィールド定義をここで閉じる
 
 
@@ -75,6 +84,10 @@ class MessageRecord(BaseModel):  # messages テーブルから返す 1 件のメ
     createdAt: str = Field(  # 作成日時を保持する
         ...,  # 必須項目であることを示す
         description="作成日時（ISO 文字列）",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    replySuggestion: str | None = Field(  # 返信案を保持する（過去データ互換のため None 許容）
+        None,
+        description="工務店側の返信案",  # ドキュメント用途の説明
     )  # フィールド定義をここで閉じる
 
 
