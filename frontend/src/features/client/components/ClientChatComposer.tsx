@@ -7,15 +7,22 @@ import { useChatInput } from '../../chat/hooks/useChatInput'; // 既存の送信
 type ClientChatComposerProps = { // 入力欄が受け取る props を型で固定する
   onMessageSent: (message: Message) => void; // 送信完了時に親へ通知する
   errorMessage: string | null; // 履歴取得エラーなどを表示するために受け取る
+  onLoadingChange?: (isLoading: boolean) => void; // ローディング状態の変化を親に通知する
 }; // props 型定義をここで閉じる
 
 /**
  * LINE風チャットの入力欄
  * @param onMessageSent - 送信完了時のコールバック
  * @param errorMessage - 画面全体のエラー表示
+ * @param onLoadingChange - ローディング状態の変化を通知するコールバック
  */
-export const ClientChatComposer: React.FC<ClientChatComposerProps> = ({ onMessageSent, errorMessage }) => {
+export const ClientChatComposer: React.FC<ClientChatComposerProps> = ({ onMessageSent, errorMessage, onLoadingChange }) => {
   const { message, setMessage, sendMessage, isLoading, error } = useChatInput(onMessageSent); // 送信処理をフックに委譲する
+
+  // ローディング状態の変化を親に通知
+  React.useEffect(() => {
+    onLoadingChange?.(isLoading);
+  }, [isLoading, onLoadingChange]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
