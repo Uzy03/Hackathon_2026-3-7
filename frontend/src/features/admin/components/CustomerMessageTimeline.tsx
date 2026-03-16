@@ -17,7 +17,7 @@ export const CustomerMessageTimeline: React.FC<CustomerMessageTimelineProps> = (
   const ordered = [...messages].reverse(); // API は新しい順なので UI は古い順に並べ替える
 
   return (
-    <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+    <div className="space-y-3 pr-2">
       {error && <div className="text-sm font-bold text-red-500 bg-red-50 p-2 rounded">{error}</div>}
 
       {isLoading && messages.length === 0 ? (
