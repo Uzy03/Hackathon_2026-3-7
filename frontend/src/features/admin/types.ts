@@ -11,6 +11,7 @@ export type CustomerMessageRecord = { // /api/customers/{id}/messages の 1 要�
   id: string; // messages.id を表す
   original: string; // 元文を表す
   converted: string; // 変換後文を表す
+  replySuggestion?: string; // 返信案を表す（過去データ互換のためオプショナル）
   aggressionScore: number; // 攻撃性スコアを表す
   createdAt: string; // 作成日時（ISO文字列）を表す
 }; // 型定義をここで閉じる

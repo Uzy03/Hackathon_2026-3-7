@@ -33,17 +33,23 @@ export const CustomerMessageTimeline: React.FC<CustomerMessageTimelineProps> = (
                 Lv.{Math.round(m.aggressionScore * 100)}
               </span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 w-full">
               <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-2xl px-4 py-2 shadow-sm bg-white text-gray-800 border border-gray-200">
-                  <p className="text-xs text-gray-400 mb-1">クライアント</p>
+                <div className="max-w-[85%] rounded-2xl px-4 py-2 shadow-sm bg-red-50 text-gray-800 border border-red-200">
+                  <p className="text-xs text-red-500 mb-1">クライアント（毒抜き前）</p>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.original}</p>
                 </div>
               </div>
               <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-2xl px-4 py-2 shadow-sm bg-green-50 text-gray-800 border border-green-100">
-                  <p className="text-xs text-gray-400 mb-1">工務店（AI）</p>
+                <div className="max-w-[85%] rounded-2xl px-4 py-2 shadow-sm bg-green-50 text-gray-800 border border-green-200">
+                  <p className="text-xs text-green-600 mb-1">毒抜き結果</p>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.converted}</p>
+                </div>
+              </div>
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl px-4 py-2 shadow-sm bg-blue-50 text-gray-800 border border-blue-200">
+                  <p className="text-xs text-blue-600 mb-1">AI 返信案</p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.replySuggestion || '（返信案なし）'}</p>
                 </div>
               </div>
             </div>
