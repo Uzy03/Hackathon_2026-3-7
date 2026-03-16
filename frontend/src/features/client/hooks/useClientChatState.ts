@@ -6,6 +6,7 @@ type HistoryResponseItem = { // /api/messages が返す 1 要素の形を型で�
   id: string; // messages.id を受け取る
   original: string; // 元文を受け取る
   converted: string; // 変換後文を受け取る
+  replySuggestion?: string; // 返信案を受け取る
   aggressionScore: number; // 攻撃性スコアを受け取る
   createdAt: string; // 作成日時（ISO 文字列）を受け取る
 }; // 型定義をここで閉じる
@@ -59,6 +60,7 @@ export const useClientChatState = (): UseClientChatStateResult => {
             id: item.id, // DB の id を UI の key として使う
             original: item.original, // 元文を反映する
             converted: item.converted, // 変換後文を反映する
+            replySuggestion: item.replySuggestion, // 返信案を反映する
             timestamp: Number.isFinite(Date.parse(item.createdAt)) ? Date.parse(item.createdAt) : Date.now(), // createdAt を timestamp に変換する
             createdAt: item.createdAt, // ISO 文字列も保持しておく
             aggressionScore: item.aggressionScore, // スコアを反映する
