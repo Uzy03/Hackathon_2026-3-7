@@ -28,6 +28,17 @@ SYSTEM_PROMPT: str = (  # Gemini に与えるシステムプロンプトを定�
 )  # 文字列定義をここで閉じる
 
 
+FEW_SHOT_EXAMPLES: str = (  # 出力精度を高めるための具体例（Few-shot prompting）を定義する
+    "【変換例1：陰湿な感情の除去】\n"
+    "入力: 「お宅の社員、態度悪すぎない？本当に教育してるの？さっさと担当変えてよ。」\n"
+    '出力: { "aggressionScore": 0.8, "converted": "担当者の態度に関するご指摘。および、担当者変更のご要望。" }\n'  # 陰湿な感情を除去し、工務店向けの事実要約を行う
+    "\n"
+    "【変換例2：事実の抽出と攻撃的な言葉の除去】\n"
+    "入力: 「壁紙の剥がれ直ってないんだけど！何回言わせるの？ふざけんな！今日中に見に来い！」\n"
+    '出力: { "aggressionScore": 0.9, "converted": "壁紙の補修が未完了とのご指摘。至急の対応（本日中の訪問）をご要望。" }\n'  # 暴言を除去し、未解決課題とアクション要求を客観的に抽出する
+) 
+
+
 class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担うクラス
     """Gemini API を利用して「毒抜き」と「攻撃性スコア算出」を行うクラス。"""
 
@@ -64,7 +75,7 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
 
         prompt: str = message  # system_instruction が使える場合は user content をそのまま渡す
         if not self._use_system_instruction:  # system_instruction を使わない場合は本文に埋め込む
-            prompt = f"{SYSTEM_PROMPT}\n\n入力テキスト:\n{message}\n\n出力:"  # 期待形式を維持しつつプロンプトを構築する
+            prompt = f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}\n\n入力テキスト:\n{message}\n\n出力:"  # SYSTEM_PROMPT、FEW_SHOT_EXAMPLES、入力テキストを結合してプロンプトを構築する
 
         timeout_raw: str = os.getenv("GEMINI_TIMEOUT_SECONDS") or ""  # 環境変数でタイムアウト秒を調整できるようにする
         timeout_seconds: float = float(timeout_raw) if timeout_raw.strip() else DEFAULT_TIMEOUT_SECONDS  # 未指定時はデフォルト値を使う
