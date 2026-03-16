@@ -2,7 +2,7 @@
 
 from __future__ import annotations  # 型ヒントの前方参照を容易にする
 
-import os  # 本番/開発で変わる設定値（FRONTEND_URL, PORT）を環境変数から取得する
+import os  # 本番/開発で変わる設定値（FRONTEND_URLS, PORT）を環境変数から取得する
 
 from fastapi import FastAPI, HTTPException, Path, Query  # FastAPI 本体と例外（HTTP エラー返却）と Path/Query を読み込む
 from fastapi.middleware.cors import CORSMiddleware  # フロントエンド連携のため CORS を設定する
@@ -24,14 +24,16 @@ from src.schema import (  # API の入出力スキーマを読み込む
 
 app: FastAPI = FastAPI()  # FastAPI アプリケーションを生成する（ASGI エントリ）
 
-frontend_url: str = os.getenv("FRONTEND_URL", "").strip()  # 本番フロントエンドURL（Vercel）を環境変数から受け取る
+frontend_urls_raw: str = os.getenv("FRONTEND_URLS", "").strip()  # 本番フロントエンドURL（Vercel）をカンマ区切りで受け取る（単一でも複数でも良い）
+frontend_urls: list[str] = [u.strip() for u in frontend_urls_raw.split(",") if u.strip()]  # カンマ区切りを正規化して空要素を除外する
 allowed_origins: list[str] = [  # CORS 許可 origin を開発・本番の両方で構成する
     "http://localhost:3000",  # 工務店（admin）開発用の origin を許可する
     "http://localhost:3001",  # クライアント（client）開発用の origin を許可する
     "http://localhost:3002",  # 互換維持のため旧ポートも許可する
 ]  # allow_origins の初期値をここで閉じる
-if frontend_url:  # 本番 URL が設定されているときだけ CORS 許可対象に加える
-    allowed_origins.append(frontend_url)  # Render（Backend）から Vercel（Frontend）へのアクセスを許可する
+if frontend_urls:  # 複数のフロントエンドURLが指定されている場合はまとめて許可する
+    allowed_origins.extend(frontend_urls)  # admin/client でプロジェクト分割した際も CORS を通すために追加する
+allowed_origins = list(dict.fromkeys(allowed_origins))  # 重複を除去して CORS 設定を安定させる
 
 app.add_middleware(  # CORS 設定をミドルウェアとして追加する
     CORSMiddleware,  # CORS ミドルウェア本体を指定する
