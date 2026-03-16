@@ -2,6 +2,8 @@
 
 from __future__ import annotations  # 型ヒントの前方参照を容易にする
 
+import os  # 本番/開発で変わる設定値（FRONTEND_URL, PORT）を環境変数から取得する
+
 from fastapi import FastAPI, HTTPException, Path, Query  # FastAPI 本体と例外（HTTP エラー返却）と Path/Query を読み込む
 from fastapi.middleware.cors import CORSMiddleware  # フロントエンド連携のため CORS を設定する
 
@@ -22,14 +24,18 @@ from src.schema import (  # API の入出力スキーマを読み込む
 
 app: FastAPI = FastAPI()  # FastAPI アプリケーションを生成する（ASGI エントリ）
 
+frontend_url: str = os.getenv("FRONTEND_URL", "").strip()  # 本番フロントエンドURL（Vercel）を環境変数から受け取る
+allowed_origins: list[str] = [  # CORS 許可 origin を開発・本番の両方で構成する
+    "http://localhost:3000",  # 工務店（admin）開発用の origin を許可する
+    "http://localhost:3001",  # クライアント（client）開発用の origin を許可する
+    "http://localhost:3002",  # 互換維持のため旧ポートも許可する
+]  # allow_origins の初期値をここで閉じる
+if frontend_url:  # 本番 URL が設定されているときだけ CORS 許可対象に加える
+    allowed_origins.append(frontend_url)  # Render（Backend）から Vercel（Frontend）へのアクセスを許可する
 
 app.add_middleware(  # CORS 設定をミドルウェアとして追加する
     CORSMiddleware,  # CORS ミドルウェア本体を指定する
-    allow_origins=[  # 開発環境のフロントエンド origin を許可する
-        "http://localhost:3000",  # Next.js dev server の標準ポートを許可する
-        "http://localhost:3001",  # クレーマー用の dev server ポートを許可する
-        "http://localhost:3002",  # 既存設定との互換のために残す
-    ],  # 許可 origin の配列をここで閉じる
+    allow_origins=allowed_origins,  # 環境に応じて構成した許可 origin 一覧を使う
     allow_credentials=True,  # Cookie 等の資格情報を許可する（将来の拡張に備える）
     allow_methods=["*"],  # すべての HTTP メソッドを許可する（開発用）
     allow_headers=["*"],  # すべてのヘッダーを許可する（Content-Type 等）
@@ -76,6 +82,18 @@ def get_database() -> SupabaseDatabase:  # 依存（SupabaseDatabase）を遅延
                 raise HTTPException(status_code=503, detail=detail)  # 設定不足を明示して返す
             raise HTTPException(status_code=500, detail=f"SupabaseDatabase 初期化に失敗しました: {exc}")  # それ以外は内部エラーとして返す
     return database  # 生成済み（または生成直後）のインスタンスを返す
+
+
+if __name__ == "__main__":  # Render の Start Command を `python main.py` にする運用を想定する
+    import uvicorn  # `uvicorn` を直接起動する場合にだけ import して依存を局所化する
+
+    port_raw: str = os.getenv("PORT", "8000").strip()  # Render が注入する PORT を受け取り、未設定なら 8000 にフォールバックする
+    try:  # PORT は外部入力なので数値化できないケースを想定して例外を握る
+        port: int = int(port_raw)  # 文字列の PORT を int に変換して uvicorn に渡す
+    except ValueError:  # 数値でない PORT が来た場合は安全側に倒す
+        port = 8000  # ローカル互換のデフォルトポートへフォールバックする
+
+    uvicorn.run(app, host="0.0.0.0", port=port)  # Render から到達できるよう 0.0.0.0 で待ち受ける
 
 
 @app.post("/api/convert", response_model=ConvertResponse)  # 変換 API を POST で公開する
