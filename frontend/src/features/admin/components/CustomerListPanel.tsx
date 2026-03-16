@@ -20,7 +20,7 @@ type CustomerListPanelProps = { // 顧客一覧パネルが受け取る props �
  */
 export const CustomerListPanel: React.FC<CustomerListPanelProps> = ({ customers, selectedCustomerId, isLoading, error, onSelect }) => {
   return (
-    <aside className="bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden flex flex-col">
+    <aside className="bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden flex flex-col h-full">
       <div className="px-4 py-3 border-b border-gray-100">
         <h2 className="text-lg font-bold text-green-700">顧客一覧</h2>
         <p className="text-xs text-gray-400">ID と暫定名、統計を表示します。</p>

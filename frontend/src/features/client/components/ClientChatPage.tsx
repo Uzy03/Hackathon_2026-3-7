@@ -1,5 +1,4 @@
 import React from 'react'; // 画面コンポーネントを定義するために React を読み込む
-import Link from 'next/link'; // ルートへ戻る導線を作るために Link を使う
 import { MascotDisplay } from '../../mascot/components/MascotDisplay'; // マスコット表示を再利用する
 import { ClientChatComposer } from './ClientChatComposer'; // チャット入力欄を読み込む
 import { ClientChatTimeline } from './ClientChatTimeline'; // チャット一覧を読み込む
@@ -17,35 +16,34 @@ export const ClientChatPage: React.FC = () => {
   const isLoading = isHistoryLoading || isSending;
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans flex flex-col relative">
+    <div className="h-[100dvh] bg-gray-100 font-sans flex flex-col overflow-hidden">
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-red-600">クレーマー画面</h1>
-          <p className="text-xs text-gray-400">送信すると「工務店に届く内容」に毒抜きされます。</p>
+          <h1 className="text-lg font-bold text-red-600">工務店チャット</h1>
+          <p className="text-xs text-gray-400">送信すると工務店（AI）が返信します。</p>
         </div>
-        <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
-          画面選択へ
-        </Link>
       </header>
 
-      <div className="fixed right-4 top-20 z-50 bg-white/90 backdrop-blur border border-gray-200 rounded-2xl shadow-xl px-4 py-3 flex items-center gap-4">
-        <div className="w-44 h-28 flex items-center justify-center">
-          <div className="scale-125 origin-center">
-            <MascotDisplay aggressionLevel={aggressionLevel} isLoading={isLoading} />
-          </div>
-        </div>
-        <div className="min-w-[120px]">
-          <p className="text-xs text-gray-400">現在の攻撃性</p>
-          <p className="text-base font-bold text-gray-700">Lv.{Math.round(aggressionLevel * 100)}</p>
-        </div>
-      </div>
+      <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-10">
+        <section className="lg:col-span-7 min-h-0 flex flex-col overflow-hidden">
+          <ClientChatTimeline messages={messages} isHistoryLoading={isHistoryLoading} />
+          <ClientChatComposer 
+            onMessageSent={onMessageSent} 
+            errorMessage={historyError} 
+            onLoadingChange={setIsSending}
+          />
+        </section>
 
-      <ClientChatTimeline messages={messages} isHistoryLoading={isHistoryLoading} />
-      <ClientChatComposer 
-        onMessageSent={onMessageSent} 
-        errorMessage={historyError} 
-        onLoadingChange={setIsSending}
-      />
+        <aside className="lg:col-span-3 border-t lg:border-t-0 lg:border-l border-gray-200 bg-white min-h-0">
+          <div className="h-full w-full flex items-center justify-center p-6">
+            <div className="w-full max-w-[420px] aspect-square flex items-center justify-center">
+              <div className="scale-[2.2] origin-center">
+                <MascotDisplay aggressionLevel={aggressionLevel} isLoading={isLoading} showFrame={false} showStatus={false} />
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
     </div>
   );
 };

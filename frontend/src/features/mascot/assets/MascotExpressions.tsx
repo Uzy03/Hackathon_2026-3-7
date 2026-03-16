@@ -166,23 +166,25 @@ export const ScaredExpression: React.FC<MascotExpressionProps> = ({ color, size 
 };
 
 /**
- * 表情タイプに応じた適切なコンポーネントを返す
+ * 表情タイプに応じた適切な要素を返す
+ * @param expression - 表情タイプ
+ * @param props - 表情コンポーネントに渡すprops
  */
-export const getExpressionComponent = (expression: ExpressionType) => {
+export const renderExpression = (expression: ExpressionType, props: MascotExpressionProps) => {
   switch (expression) {
     case 'normal':
-      return NormalExpression;
+      return <NormalExpression {...props} />;
     case 'worried':
-      return WorriedExpression;
+      return <WorriedExpression {...props} />;
     case 'crying':
-      return CryingExpression;
+      return <CryingExpression {...props} />;
     case 'damaged':
-      return DamagedExpression;
+      return <DamagedExpression {...props} />;
     case 'thinking':
-      return ThinkingExpression;
+      return <ThinkingExpression {...props} />;
     case 'scared':
-      return ScaredExpression;
+      return <ScaredExpression {...props} />;
     default:
-      return NormalExpression;
+      return <NormalExpression {...props} />;
   }
 };

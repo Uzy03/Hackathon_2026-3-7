@@ -21,8 +21,8 @@ export const AdminDashboardPage: React.FC = () => {
   }, [customers, selectedCustomerId]); // 顧客一覧と選択IDが変わったら再計算する
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8 font-sans">
-      <header className="mb-6 flex items-center justify-between">
+    <div className="min-h-screen lg:h-[100dvh] bg-gray-100 p-8 font-sans flex flex-col lg:overflow-hidden">
+      <header className="mb-6 flex items-center justify-between flex-none">
         <div>
           <h1 className="text-2xl font-bold text-green-700">工務店ダッシュボード</h1>
           <p className="text-gray-500 text-sm mt-1">顧客一覧から選択して、会話履歴と統計を確認します。</p>
@@ -32,8 +32,8 @@ export const AdminDashboardPage: React.FC = () => {
         </Link>
       </header>
 
-      <main className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-140px)]">
-        <div className="lg:col-span-1 min-h-0">
+      <main className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 lg:overflow-hidden">
+        <div className="lg:col-span-1 min-h-0 lg:overflow-y-auto">
           <CustomerListPanel
             customers={customers}
             selectedCustomerId={selectedCustomerId}
@@ -43,7 +43,7 @@ export const AdminDashboardPage: React.FC = () => {
           />
         </div>
 
-        <div className="lg:col-span-2 min-h-0">
+        <div className="lg:col-span-2 min-h-0 lg:overflow-y-auto">
           <CustomerDetailPanel customer={selectedCustomer} messages={messages} isMessagesLoading={isMessagesLoading} messagesError={messagesError} />
         </div>
       </main>
