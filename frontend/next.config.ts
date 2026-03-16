@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   distDir,
+  devIndicators: false,
   
   // Turbopackのルート警告を解消
   // frontendディレクトリをルートとして認識させる

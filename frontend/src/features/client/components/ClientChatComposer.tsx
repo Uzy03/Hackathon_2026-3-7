@@ -25,7 +25,7 @@ export const ClientChatComposer: React.FC<ClientChatComposerProps> = ({ onMessag
   }, [isLoading, onLoadingChange]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       sendMessage();
     }
@@ -59,6 +59,9 @@ export const ClientChatComposer: React.FC<ClientChatComposerProps> = ({ onMessag
         >
           {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
         </button>
+      </div>
+      <div className="mt-2 text-[11px] text-gray-400">
+        送信: Ctrl+Enter / Cmd+Enter
       </div>
     </div>
   );
