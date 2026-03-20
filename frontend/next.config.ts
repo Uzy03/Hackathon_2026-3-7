@@ -3,7 +3,11 @@ import type { NextConfig } from "next";
 const distDir = process.env.NEXT_DIST_DIR || ".next"; // admin/client 同時起動のためにビルド出力先を分けられるようにする
 
 const isProduction = process.env.NODE_ENV === "production"; // Vercel 本番ビルドかどうかを NODE_ENV で判定する
-const backendUrlFromEnv = process.env.BACKEND_URL || ""; // 本番環境では Render の Backend URL を環境変数から受け取る
+const isVercelBuild = process.env.VERCEL === "1"; // Vercel 環境では localhost への rewrite が私用ネットワーク扱いになり失敗するため判定する
+const backendUrlFromEnv = (process.env.BACKEND_URL || "").trim(); // 本番環境では Render の Backend URL を環境変数から受け取る
+if (isProduction && isVercelBuild && !backendUrlFromEnv) { // Vercel の本番ビルドで BACKEND_URL 未設定だと /api/* が 404 になるためビルド時に止める
+  throw new Error("BACKEND_URL is required on Vercel production builds."); // 運用ミスを即座に検知できるよう例外で失敗させる
+}
 const backendBaseUrl = isProduction && backendUrlFromEnv ? backendUrlFromEnv : "http://localhost:8000"; // 本番は BACKEND_URL、開発は localhost を使う
 const normalizedBackendBaseUrl = backendBaseUrl.replace(/\/$/, ""); // 末尾スラッシュ有無で URL 結合が壊れないよう正規化する
 console.log( // Vercel のビルドログで rewrites の転送先を確認できるように出力する
