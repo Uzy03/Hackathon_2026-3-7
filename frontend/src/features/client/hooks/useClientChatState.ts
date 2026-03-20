@@ -49,7 +49,7 @@ export const useClientChatState = (): UseClientChatStateResult => {
       setHistoryError(null); // 前回エラーをクリアする
 
       try {
-        const response = await fetch(`/api/messages?session_id=${encodeURIComponent(sessionId)}`, { signal: controller.signal }); // session_id で履歴を取得する
+        const response = await fetch(`/backend-api/messages?session_id=${encodeURIComponent(sessionId)}`, { signal: controller.signal }); // session_id で履歴を取得する
         if (!response.ok) throw new Error('Failed to load history'); // HTTP エラーは例外にして catch へ集約する
 
         const data: HistoryResponseItem[] = (await response.json()) as HistoryResponseItem[]; // JSON を期待する配列として受け取る
