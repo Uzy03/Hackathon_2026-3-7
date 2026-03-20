@@ -9,17 +9,30 @@ from fastapi.middleware.cors import CORSMiddleware  # フロントエンド連�
 
 from typing import Optional  # 遅延初期化のために Optional を使用する
 
-from src.database import SupabaseDatabase  # Supabase 永続化ロジックを単一責任で担うクラス
-from src.gemini_engine import GeminiEngine  # Gemini 呼び出しロジックを単一責任で担うクラス
-from src.schema import (  # API の入出力スキーマを読み込む
-    ConvertRequest,  # convert 入力を表す
-    ConvertResponse,  # convert 出力を表す
-    CustomerListItem,  # 顧客一覧の返却を表す
-    CustomerRecord,  # 顧客レコードの返却を表す
-    CustomerStats,  # 顧客統計の返却を表す
-    MessageRecord,  # メッセージ履歴の返却を表す
-    UpdateCustomerRequest,  # 顧客更新の入力を表す
-)  # import をここで閉じる
+try:  # 実行ディレクトリ差分（repo root / backend）で import 経路が変わるためフォールバックする
+    from src.database import SupabaseDatabase  # backend/ を cwd にして起動する場合の import 経路を使う
+    from src.gemini_engine import GeminiEngine  # backend/ を cwd にして起動する場合の import 経路を使う
+    from src.schema import (  # backend/ を cwd にして起動する場合の import 経路を使う
+        ConvertRequest,  # convert 入力を表す
+        ConvertResponse,  # convert 出力を表す
+        CustomerListItem,  # 顧客一覧の返却を表す
+        CustomerRecord,  # 顧客レコードの返却を表す
+        CustomerStats,  # 顧客統計の返却を表す
+        MessageRecord,  # メッセージ履歴の返却を表す
+        UpdateCustomerRequest,  # 顧客更新の入力を表す
+    )  # import をここで閉じる
+except ModuleNotFoundError:  # Render 等で repo root を cwd にして起動するケースを想定して代替経路へ切り替える
+    from backend.src.database import SupabaseDatabase  # repo root 起動時は backend パッケージ経由で import する
+    from backend.src.gemini_engine import GeminiEngine  # repo root 起動時は backend パッケージ経由で import する
+    from backend.src.schema import (  # repo root 起動時は backend パッケージ経由で import する
+        ConvertRequest,  # convert 入力を表す
+        ConvertResponse,  # convert 出力を表す
+        CustomerListItem,  # 顧客一覧の返却を表す
+        CustomerRecord,  # 顧客レコードの返却を表す
+        CustomerStats,  # 顧客統計の返却を表す
+        MessageRecord,  # メッセージ履歴の返却を表す
+        UpdateCustomerRequest,  # 顧客更新の入力を表す
+    )  # import をここで閉じる
 
 
 app: FastAPI = FastAPI()  # FastAPI アプリケーションを生成する（ASGI エントリ）
