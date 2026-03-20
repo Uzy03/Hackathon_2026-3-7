@@ -2,9 +2,9 @@
 
 from __future__ import annotations  # 型ヒントの前方参照を容易にする
 
-import os  # 本番/開発で変わる設定値（FRONTEND_URLS, PORT）を環境変数から取得する
+import os  # 本番/開発で変わる設定値（FRONTEND_URL, PORT）を環境変数から取得する
 
-from fastapi import FastAPI, HTTPException, Path, Query  # FastAPI 本体と例外（HTTP エラー返却）と Path/Query を読み込む
+from fastapi import APIRouter, FastAPI, HTTPException, Path, Query  # FastAPI 本体とルーティング部品を読み込む
 from fastapi.middleware.cors import CORSMiddleware  # フロントエンド連携のため CORS を設定する
 
 from typing import Optional  # 遅延初期化のために Optional を使用する
@@ -37,16 +37,15 @@ except ModuleNotFoundError:  # Render 等で repo root を cwd にして起動�
 
 app: FastAPI = FastAPI()  # FastAPI アプリケーションを生成する（ASGI エントリ）
 
-frontend_urls_raw: str = os.getenv("FRONTEND_URLS", "").strip()  # 本番フロントエンドURL（Vercel）をカンマ区切りで受け取る（単一でも複数でも良い）
-frontend_urls: list[str] = [u.strip() for u in frontend_urls_raw.split(",") if u.strip()]  # カンマ区切りを正規化して空要素を除外する
+api_router: APIRouter = APIRouter()  # OpenAPI に反映されるよう、ルートを APIRouter に集約して登録する
+frontend_url: str = os.getenv("FRONTEND_URL", "").strip()  # 本番フロントエンドURL（Vercel）を環境変数から受け取る
 allowed_origins: list[str] = [  # CORS 許可 origin を開発・本番の両方で構成する
     "http://localhost:3000",  # 工務店（admin）開発用の origin を許可する
     "http://localhost:3001",  # クライアント（client）開発用の origin を許可する
     "http://localhost:3002",  # 互換維持のため旧ポートも許可する
 ]  # allow_origins の初期値をここで閉じる
-if frontend_urls:  # 複数のフロントエンドURLが指定されている場合はまとめて許可する
-    allowed_origins.extend(frontend_urls)  # admin/client でプロジェクト分割した際も CORS を通すために追加する
-allowed_origins = list(dict.fromkeys(allowed_origins))  # 重複を除去して CORS 設定を安定させる
+if frontend_url:  # 本番 URL が設定されているときだけ CORS 許可対象に加える
+    allowed_origins.append(frontend_url)  # Render（Backend）から Vercel（Frontend）へのアクセスを許可する
 
 app.add_middleware(  # CORS 設定をミドルウェアとして追加する
     CORSMiddleware,  # CORS ミドルウェア本体を指定する
@@ -111,7 +110,7 @@ if __name__ == "__main__":  # Render の Start Command を `python main.py` に�
     uvicorn.run(app, host="0.0.0.0", port=port)  # Render から到達できるよう 0.0.0.0 で待ち受ける
 
 
-@app.post("/api/convert", response_model=ConvertResponse)  # 変換 API を POST で公開する
+@api_router.post("/api/convert", response_model=ConvertResponse)  # 変換 API を POST で公開する
 def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッセージを毒抜きし、攻撃性スコアを返す
     """毒抜きと攻撃性スコア算出を同時に行う API。
 
@@ -169,7 +168,7 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
     )  # レスポンス生成をここで閉じる
 
 
-@app.get("/api/messages", response_model=list[MessageRecord])  # 履歴取得 API を GET で公開する
+@api_router.get("/api/messages", response_model=list[MessageRecord])  # 履歴取得 API を GET で公開する
 def list_messages(session_id: str = Query(..., min_length=1)) -> list[MessageRecord]:  # session_id に紐づく履歴を返す
     """セッションに紐づく顧客の過去メッセージ（毒抜き済み）を返す。
 
@@ -215,7 +214,7 @@ def list_messages(session_id: str = Query(..., min_length=1)) -> list[MessageRec
     return result  # 整形済みの履歴を返す
 
 
-@app.get("/api/stats/customers", response_model=list[CustomerStats])  # 顧客別統計 API を GET で公開する
+@api_router.get("/api/stats/customers", response_model=list[CustomerStats])  # 顧客別統計 API を GET で公開する
 def list_customer_stats() -> list[CustomerStats]:  # 顧客別の統計を返す
     """顧客ごとの統計（平均攻撃性スコア/累計件数/最終送信日時）を返す。
 
@@ -227,7 +226,7 @@ def list_customer_stats() -> list[CustomerStats]:  # 顧客別の統計を返す
     return [CustomerStats.model_validate(item) for item in stats]  # Pydantic で検証して返す
 
 
-@app.get("/api/customers", response_model=list[CustomerListItem])  # 顧客一覧 API を GET で公開する
+@api_router.get("/api/customers", response_model=list[CustomerListItem])  # 顧客一覧 API を GET で公開する
 def list_customers() -> list[CustomerListItem]:  # 工務店用の顧客一覧を返す
     """工務店画面向けに、顧客一覧（表示名 + 統計）を返す。
 
@@ -239,7 +238,7 @@ def list_customers() -> list[CustomerListItem]:  # 工務店用の顧客一覧�
     return [CustomerListItem.model_validate(item) for item in rows]  # Pydantic で検証して返す
 
 
-@app.get("/api/customers/{customer_id}/messages", response_model=list[MessageRecord])  # 顧客別履歴 API を GET で公開する
+@api_router.get("/api/customers/{customer_id}/messages", response_model=list[MessageRecord])  # 顧客別履歴 API を GET で公開する
 def list_customer_messages(customer_id: str = Path(..., min_length=1)) -> list[MessageRecord]:  # customer_id に紐づく履歴を返す
     """customer_id に紐づく過去メッセージ（毒抜き済み）を返す。
 
@@ -282,7 +281,7 @@ def list_customer_messages(customer_id: str = Path(..., min_length=1)) -> list[M
     return result  # 整形済みの履歴を返す
 
 
-@app.patch("/api/customers/{customer_id}", response_model=CustomerRecord)  # 顧客更新 API を PATCH で公開する
+@api_router.patch("/api/customers/{customer_id}", response_model=CustomerRecord)  # 顧客更新 API を PATCH で公開する
 def update_customer(customer_id: str, request: UpdateCustomerRequest) -> CustomerRecord:  # 顧客表示名を更新して返す
     """顧客の表示名を更新して返す。
 
@@ -304,3 +303,18 @@ def update_customer(customer_id: str, request: UpdateCustomerRequest) -> Custome
         displayName=str(updated.get("display_name") or ""),  # 表示名を入れる
         createdAt=str(updated.get("created_at") or ""),  # 作成日時を入れる
     )  # レスポンス生成をここで閉じる
+
+
+app.include_router(api_router)  # APIRouter のルートを FastAPI に登録して OpenAPI に反映させる
+
+
+if __name__ == "__main__":  # Render の Start Command を `python backend/main.py` にしても起動できるようにする
+    import uvicorn  # Python 実行時にだけ uvicorn を import して依存を局所化する
+
+    port_raw: str = os.getenv("PORT", "8000").strip()  # Render が注入する PORT を受け取り、未設定なら 8000 にフォールバックする
+    try:  # PORT は外部入力なので数値化できないケースを想定して例外を握る
+        port: int = int(port_raw)  # 文字列の PORT を int に変換して uvicorn に渡す
+    except ValueError:  # 数値でない PORT が来た場合は安全側に倒す
+        port = 8000  # ローカル互換のデフォルトポートへフォールバックする
+
+    uvicorn.run(app, host="0.0.0.0", port=port)  # Render から到達できるよう 0.0.0.0 で待ち受ける
