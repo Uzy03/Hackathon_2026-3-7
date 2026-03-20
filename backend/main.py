@@ -97,19 +97,6 @@ def get_database() -> SupabaseDatabase:  # 依存（SupabaseDatabase）を遅延
             raise HTTPException(status_code=500, detail=f"SupabaseDatabase 初期化に失敗しました: {exc}")  # それ以外は内部エラーとして返す
     return database  # 生成済み（または生成直後）のインスタンスを返す
 
-
-if __name__ == "__main__":  # Render の Start Command を `python main.py` にする運用を想定する
-    import uvicorn  # `uvicorn` を直接起動する場合にだけ import して依存を局所化する
-
-    port_raw: str = os.getenv("PORT", "8000").strip()  # Render が注入する PORT を受け取り、未設定なら 8000 にフォールバックする
-    try:  # PORT は外部入力なので数値化できないケースを想定して例外を握る
-        port: int = int(port_raw)  # 文字列の PORT を int に変換して uvicorn に渡す
-    except ValueError:  # 数値でない PORT が来た場合は安全側に倒す
-        port = 8000  # ローカル互換のデフォルトポートへフォールバックする
-
-    uvicorn.run(app, host="0.0.0.0", port=port)  # Render から到達できるよう 0.0.0.0 で待ち受ける
-
-
 @api_router.post("/api/convert", response_model=ConvertResponse)  # 変換 API を POST で公開する
 def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッセージを毒抜きし、攻撃性スコアを返す
     """毒抜きと攻撃性スコア算出を同時に行う API。
