@@ -34,13 +34,14 @@ const nextConfig: NextConfig = {
     // },
   },
 
-  async rewrites() {
-    return [
+  async rewrites() { // 開発時のみ rewrites を使い、本番は Route Handler のプロキシに任せる
+    if (process.env.NODE_ENV === "production") return []; // Vercel 本番で外部 URL rewrite が private 判定される事故を避ける
+    return [ // 開発時は localhost の FastAPI に転送して同一オリジンで扱う
       {
-        source: '/api/:path*',
-        destination: `${normalizedBackendBaseUrl}/api/:path*`,
+        source: "/api/:path*", // Next 側の /api/* を捕捉する
+        destination: "http://localhost:8000/api/:path*", // FastAPI の /api/* に転送する
       },
-    ];
+    ]; // rewrites 配列をここで閉じる
   },
 };
 
