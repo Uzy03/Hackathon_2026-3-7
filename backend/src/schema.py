@@ -25,6 +25,12 @@ class GeminiOutput(BaseModel):  # Gemini からの JSON 出力を厳密に受け
         ...,  # 必須項目であることを示す
         description="攻撃性スコア（0.0=冷静〜1.0=激昂）",  # ドキュメント用途の説明
     )  # フィールド定義をここで閉じる
+    urgency: int = Field(  # 緊急度を表す
+        ...,  # 必須項目であることを示す
+        description="緊急度（1=要望〜5=緊急トラブル）",
+        ge=1,
+        le=5,
+    )  # フィールド定義をここで閉じる
     converted: str = Field(  # 毒抜き変換後の文面を表す
         ...,  # 必須項目であることを示す
         description="毒抜き変換後の丁寧なビジネス敬語メッセージ",  # ドキュメント用途の説明
@@ -35,6 +41,11 @@ class GeminiOutput(BaseModel):  # Gemini からの JSON 出力を厳密に受け
         description="工務店側の返信案",  # ドキュメント用途の説明
         min_length=1,  # 空文字を弾く
     )  # フィールド定義をここで閉じる
+    politeness: int = Field(..., description="丁寧さ", ge=1, le=5)
+    clarity: int = Field(..., description="明確性", ge=1, le=5)
+    specificity: int = Field(..., description="具体性", ge=1, le=5)
+    emotionalStability: int = Field(..., description="感情安定性", ge=1, le=5)
+    financialDemand: int = Field(..., description="金銭要求度", ge=1, le=5)
 
 
 class ConvertResponse(BaseModel):  # /api/convert の出力スキーマを表す
@@ -53,6 +64,12 @@ class ConvertResponse(BaseModel):  # /api/convert の出力スキーマを表す
         description="攻撃性スコア（0.0=冷静〜1.0=激昂）",  # ドキュメント用途の説明
         ge=0.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
         le=1.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+    )  # フィールド定義をここで閉じる
+    urgency: int = Field(  # 緊急度を返す
+        ...,  # 必須項目であることを示す
+        description="緊急度（1=要望〜5=緊急トラブル）",
+        ge=1,
+        le=5,
     )  # フィールド定義をここで閉じる
     replySuggestion: str = Field(  # 工務店側の返信案を返す
         ...,  # 必須項目であることを示す
@@ -81,6 +98,12 @@ class MessageRecord(BaseModel):  # messages テーブルから返す 1 件のメ
         ge=0.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
         le=1.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
     )  # フィールド定義をここで閉じる
+    urgency: int = Field(  # 緊急度を保持する
+        1,  # 過去互換のためデフォルトを 1 とする
+        description="緊急度（1=要望〜5=緊急トラブル）",
+        ge=1,
+        le=5,
+    )  # フィールド定義をここで閉じる
     createdAt: str = Field(  # 作成日時を保持する
         ...,  # 必須項目であることを示す
         description="作成日時（ISO 文字列）",  # ドキュメント用途の説明
@@ -89,6 +112,11 @@ class MessageRecord(BaseModel):  # messages テーブルから返す 1 件のメ
         None,
         description="工務店側の返信案",  # ドキュメント用途の説明
     )  # フィールド定義をここで閉じる
+    politeness: int = Field(3, description="丁寧さ", ge=1, le=5)
+    clarity: int = Field(3, description="明確性", ge=1, le=5)
+    specificity: int = Field(3, description="具体性", ge=1, le=5)
+    emotionalStability: int = Field(3, description="感情安定性", ge=1, le=5)
+    financialDemand: int = Field(1, description="金銭要求度", ge=1, le=5)
 
 
 class CustomerStats(BaseModel):  # 顧客別統計の 1 行を表す
@@ -103,6 +131,16 @@ class CustomerStats(BaseModel):  # 顧客別統計の 1 行を表す
         description="顧客の平均攻撃性スコア",  # ドキュメント用途の説明
         ge=0.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
         le=1.0,  # 範囲外の値を弾いて UI/ロジックの整合性を守る
+    )  # フィールド定義をここで閉じる
+    maxUrgency: int = Field(  # 最大緊急度を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客の最大緊急度",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    avgStars: float = Field(  # 星の数の平均値を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客のポジティブ指標の平均星数",  # ドキュメント用途の説明
+        ge=0.0,
+        le=5.0,
     )  # フィールド定義をここで閉じる
     messageCount: int = Field(  # 累計メッセージ数を保持する
         ...,  # 必須項目であることを示す
@@ -149,6 +187,16 @@ class CustomerListItem(BaseModel):  # 工務店の顧客一覧に必要な集計
         description="顧客の平均攻撃性スコア",  # ドキュメント用途の説明
         ge=0.0,  # 範囲外の値を弾いて整合性を守る
         le=1.0,  # 範囲外の値を弾いて整合性を守る
+    )  # フィールド定義をここで閉じる
+    maxUrgency: int = Field(  # 最大緊急度を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客の最大緊急度",  # ドキュメント用途の説明
+    )  # フィールド定義をここで閉じる
+    avgStars: float = Field(  # 星の数の平均値を保持する
+        ...,  # 必須項目であることを示す
+        description="顧客のポジティブ指標の平均星数",  # ドキュメント用途の説明
+        ge=0.0,
+        le=5.0,
     )  # フィールド定義をここで閉じる
     messageCount: int = Field(  # 累計メッセージ数を保持する
         ...,  # 必須項目であることを示す

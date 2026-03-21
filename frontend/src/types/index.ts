@@ -18,6 +18,18 @@ export interface Message {
   createdAt?: string; // DB の created_at（ISO 文字列）を保持する
   /** その時点での攻撃性スコア (0.0 - 1.0) */
   aggressionScore: number; // 0.0〜1.0 の攻撃性スコアを保持する
+  /** 緊急度 (1 - 5) */
+  urgency?: number; // 顧客の感情とは別の緊急度・重要度を表す
+  /** 丁寧さ (1 - 5) */
+  politeness?: number;
+  /** 明確性 (1 - 5) */
+  clarity?: number;
+  /** 具体性 (1 - 5) */
+  specificity?: number;
+  /** 感情安定性 (1 - 5) */
+  emotionalStability?: number;
+  /** 金銭要求度 (1 - 5) */
+  financialDemand?: number;
 }
 
 /**
@@ -40,6 +52,10 @@ export interface CustomerStats {
   customerId: string; // 顧客を識別する customers.id を表す
   /** 平均攻撃性スコア（0.0 - 1.0） */
   avgAggressionScore: number; // messages の aggression_score の平均値を表す
+  /** 最大緊急度 */
+  maxUrgency: number; // 最大緊急度を表す
+  /** 平均星数 */
+  avgStars: number; // 平均星数を表す
   /** 累計メッセージ数 */
   messageCount: number; // messages の件数（累計）を表す
   /** 最終送信日時（ISO文字列、未送信の場合は null） */

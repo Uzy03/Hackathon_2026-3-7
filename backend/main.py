@@ -196,8 +196,14 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
 
     import json
     combined_payload = json.dumps({
-        "converted": converted_text,
-        "replySuggestion": reply_suggestion
+        "converted": gemini_output.converted,
+        "replySuggestion": gemini_output.replySuggestion,
+        "urgency": gemini_output.urgency,
+        "politeness": gemini_output.politeness,
+        "clarity": gemini_output.clarity,
+        "specificity": gemini_output.specificity,
+        "emotionalStability": gemini_output.emotionalStability,
+        "financialDemand": gemini_output.financialDemand
     }, ensure_ascii=False)
 
     try:  # 保存は DB 依存のため例外を捕捉する
@@ -214,9 +220,15 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
 
     return ConvertResponse(  # API のレスポンススキーマに合わせて整形して返す
         original=message,  # 元の入力をそのまま返す（フロント側で表示に使用）
-        converted=converted_text,  # 毒抜きされたテキストを返す
-        aggressionScore=aggression_score,  # Gemini の攻撃性スコアを返す
-        replySuggestion=reply_suggestion,  # 返信案を返す
+        converted=gemini_output.converted,  # 毒抜きされたテキストを返す
+        aggressionScore=gemini_output.aggressionScore,  # Gemini の攻撃性スコアを返す
+        urgency=gemini_output.urgency,  # 緊急度を返す
+        replySuggestion=gemini_output.replySuggestion,  # 返信案を返す
+        politeness=gemini_output.politeness,
+        clarity=gemini_output.clarity,
+        specificity=gemini_output.specificity,
+        emotionalStability=gemini_output.emotionalStability,
+        financialDemand=gemini_output.financialDemand,
     )  # レスポンス生成をここで閉じる
 
 
@@ -244,11 +256,19 @@ def list_messages(session_id: str = Query(..., min_length=1)) -> list[MessageRec
         raw_converted = str(row.get("converted_text") or "")
         converted_text = raw_converted
         reply_suggestion = ""
+        urgency_val = 1
+        politeness_val, clarity_val, specificity_val, emotional_val, financial_val = 3, 3, 3, 3, 1
         if raw_converted.startswith("{") and raw_converted.endswith("}"):
             try:
                 parsed = json.loads(raw_converted)
                 converted_text = parsed.get("converted", raw_converted)
                 reply_suggestion = parsed.get("replySuggestion", "")
+                urgency_val = parsed.get("urgency", parsed.get("importance", 1))
+                politeness_val = parsed.get("politeness", 3)
+                clarity_val = parsed.get("clarity", 3)
+                specificity_val = parsed.get("specificity", 3)
+                emotional_val = parsed.get("emotionalStability", 3)
+                financial_val = parsed.get("financialDemand", 1)
             except json.JSONDecodeError:
                 pass
 
@@ -258,8 +278,14 @@ def list_messages(session_id: str = Query(..., min_length=1)) -> list[MessageRec
                 original=str(row.get("original_text") or ""),  # 生メッセージ
                 converted=converted_text,  # 抽出した毒抜き文
                 aggressionScore=float(row.get("aggression_score") or 0.0),  # スコアを float 化して渡す
+                urgency=urgency_val,  # 抽出した緊急度
                 createdAt=str(row.get("created_at") or ""),  # created_at を ISO 文字列として渡す
                 replySuggestion=reply_suggestion, # 抽出した返信案
+                politeness=politeness_val,
+                clarity=clarity_val,
+                specificity=specificity_val,
+                emotionalStability=emotional_val,
+                financialDemand=financial_val,
             )  # MessageRecord の生成をここで閉じる
         )  # append をここで閉じる
 
@@ -312,11 +338,19 @@ def list_customer_messages(customer_id: str = Path(..., min_length=1)) -> list[M
         raw_converted = str(row.get("converted_text") or "")
         converted_text = raw_converted
         reply_suggestion = ""
+        urgency_val = 1
+        politeness_val, clarity_val, specificity_val, emotional_val, financial_val = 3, 3, 3, 3, 1
         if raw_converted.startswith("{") and raw_converted.endswith("}"):
             try:
                 parsed = json.loads(raw_converted)
                 converted_text = parsed.get("converted", raw_converted)
                 reply_suggestion = parsed.get("replySuggestion", "")
+                urgency_val = parsed.get("urgency", parsed.get("importance", 1))
+                politeness_val = parsed.get("politeness", 3)
+                clarity_val = parsed.get("clarity", 3)
+                specificity_val = parsed.get("specificity", 3)
+                emotional_val = parsed.get("emotionalStability", 3)
+                financial_val = parsed.get("financialDemand", 1)
             except json.JSONDecodeError:
                 pass
 
@@ -326,8 +360,14 @@ def list_customer_messages(customer_id: str = Path(..., min_length=1)) -> list[M
                 original=str(row.get("original_text") or ""),  # 元文
                 converted=converted_text,  # 抽出した毒抜き文
                 aggressionScore=float(row.get("aggression_score") or 0.0),  # スコアを float 化して渡す
+                urgency=urgency_val,  # 抽出した緊急度
                 createdAt=str(row.get("created_at") or ""),  # created_at を ISO 文字列として渡す
                 replySuggestion=reply_suggestion, # 抽出した返信案
+                politeness=politeness_val,
+                clarity=clarity_val,
+                specificity=specificity_val,
+                emotionalStability=emotional_val,
+                financialDemand=financial_val,
             )  # MessageRecord の生成をここで閉じる
         )  # append をここで閉じる
     return result  # 整形済みの履歴を返す
