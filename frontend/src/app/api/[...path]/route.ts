@@ -40,6 +40,7 @@ const proxy = async (request: NextRequest, context: HandlerContext): Promise<Res
   request.headers.forEach((value, key) => { // クライアントからのヘッダーを必要最小限で転送する
     const lower = key.toLowerCase(); // 比較のため小文字化する
     if (lower === 'host') return; // host は転送先と不整合になるため除外する
+    if (lower === 'accept-encoding') return; // 圧縮を転送すると content-length 不整合で JSON が途中で切れることがあるため除外する
     headers.set(key, value); // それ以外はそのまま転送する
   }); // forEach をここで閉じる
 
@@ -55,6 +56,7 @@ const proxy = async (request: NextRequest, context: HandlerContext): Promise<Res
 
   const responseHeaders = new Headers(upstreamResponse.headers); // 返却ヘッダーをコピーして編集可能にする
   responseHeaders.delete('content-encoding'); // 圧縮ヘッダーは環境差で不整合になりやすいので除外する
+  responseHeaders.delete('content-length'); // content-length はデコード後のサイズと一致しない場合があるため除外する
   responseHeaders.delete('transfer-encoding'); // ストリーム関連ヘッダーは Next 側で管理されるため除外する
 
   return new Response(upstreamResponse.body, { // 受け取ったレスポンスをそのまま返す
