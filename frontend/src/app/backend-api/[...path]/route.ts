@@ -41,6 +41,7 @@ const proxy = async (request: NextRequest, context: HandlerContext): Promise<Res
   request.headers.forEach((value, key) => {
     const lower = key.toLowerCase();
     if (lower === 'host') return;
+    if (lower === 'accept-encoding') return;
     headers.set(key, value);
   });
 
@@ -56,6 +57,7 @@ const proxy = async (request: NextRequest, context: HandlerContext): Promise<Res
 
   const responseHeaders = new Headers(upstreamResponse.headers);
   responseHeaders.delete('content-encoding');
+  responseHeaders.delete('content-length');
   responseHeaders.delete('transfer-encoding');
 
   return new Response(upstreamResponse.body, {
@@ -67,4 +69,3 @@ const proxy = async (request: NextRequest, context: HandlerContext): Promise<Res
 export const GET = proxy;
 export const POST = proxy;
 export const PATCH = proxy;
-
