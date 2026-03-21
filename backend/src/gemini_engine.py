@@ -21,6 +21,14 @@ GEMINI_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"  #
 DEFAULT_EMBEDDING_DIMENSION: int = 768  # Supabase の vector(768) と整合する埋め込み次元を定義する
 
 
+class GeminiRateLimitError(RuntimeError):
+    pass
+
+
+class GeminiApiError(RuntimeError):
+    pass
+
+
 class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担うクラス
     """Gemini API を利用して「毒抜き」と「攻撃性スコア算出」を行うクラス。"""
 
@@ -137,8 +145,13 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
             json=payload,  # JSON ボディを送信する
             timeout=timeout_seconds,  # 応答待ちの上限秒数を指定してハングを防ぐ
         )  # リクエスト呼び出しをここで閉じる
-
-        response.raise_for_status()  # 4xx/5xx を例外化して呼び出し側で扱えるようにする
+        try:  # エラー応答でも API キーが例外文字列に混入しないように捕捉する
+            response.raise_for_status()  # 4xx/5xx を例外化して呼び出し側で扱えるようにする
+        except requests.HTTPError:  # requests が生成する例外は URL を含みうるため、ここで握って安全な例外へ変換する
+            status_code: int = int(getattr(response, "status_code", 0) or 0)  # 応答のステータスコードを取り出す
+            if status_code == 429:  # レート制限は運用上頻出なので専用例外にする
+                raise GeminiRateLimitError("Gemini Embeddings のレート制限に達しました。時間をおいて再試行してください。")  # 安全なメッセージで通知する
+            raise GeminiApiError(f"Gemini Embeddings の呼び出しに失敗しました（status={status_code}）。")  # URL を含めずに失敗を通知する
 
         data: dict[str, Any] = response.json()  # 応答 JSON を辞書として取得する
         embedding_obj: dict[str, Any] = {}  # 単一/複数の両形式に対応して embedding オブジェクトを取り出す
@@ -191,8 +204,13 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
             json=payload,  # JSON ボディを送信する
             timeout=timeout_seconds,  # 応答待ちの上限秒数を指定してハングを防ぐ
         )  # リクエスト呼び出しをここで閉じる
-
-        response.raise_for_status()  # 4xx/5xx を例外化して呼び出し側で扱えるようにする
+        try:  # エラー応答でも API キーが例外文字列に混入しないように捕捉する
+            response.raise_for_status()  # 4xx/5xx を例外化して呼び出し側で扱えるようにする
+        except requests.HTTPError:  # requests が生成する例外は URL を含みうるため、ここで握って安全な例外へ変換する
+            status_code: int = int(getattr(response, "status_code", 0) or 0)  # 応答のステータスコードを取り出す
+            if status_code == 429:  # レート制限は運用上頻出なので専用例外にする
+                raise GeminiRateLimitError("Gemini のレート制限に達しました。時間をおいて再試行してください。")  # 安全なメッセージで通知する
+            raise GeminiApiError(f"Gemini の呼び出しに失敗しました（status={status_code}）。")  # URL を含めずに失敗を通知する
 
         data: dict[str, Any] = response.json()  # 応答 JSON を辞書として取得する
         candidates: list[Any] = list(data.get("candidates") or [])  # candidates 配列を安全に取り出す
