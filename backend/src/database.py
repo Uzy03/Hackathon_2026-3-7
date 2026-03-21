@@ -283,7 +283,7 @@ class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラ�
         raw = (  # messages の必要列を一括で取得する
             self._client  # Supabase クライアントを参照する
             .table("messages")  # messages テーブルを対象にする
-            .select("customer_id, aggression_score, created_at")  # 集計に必要な列のみ取得する
+            .select("customer_id, aggression_score, converted_text, created_at")  # 集計に必要な列のみ取得する
             .order("created_at", desc=True)  # 新しい順に取得する
             .limit(int(limit))  # 上限件数を適用する
             .execute()  # クエリを実行する
@@ -291,17 +291,37 @@ class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラ�
 
         rows: list[dict[str, Any]] = list(raw.data or [])  # None を空にして扱いやすくする
 
+        import json
         buckets: dict[str, dict[str, Any]] = {}  # customer_id ごとの集計バケツを用意する
         for row in rows:  # 各メッセージ行を走査して集計する
             cid: str = str(row.get("customer_id"))  # customer_id を文字列化してキーにする
             score: float = float(row.get("aggression_score") or 0.0)  # スコアを float 化して加算できるようにする
             created_at_raw: str = str(row.get("created_at") or "")  # created_at を文字列として保持する
+            converted_text = str(row.get("converted_text") or "")
+            
+            urgency = 1
+            politeness_val, clarity_val, specificity_val, emotional_val, financial_val = 3, 3, 3, 3, 1
+            if converted_text.startswith("{") and converted_text.endswith("}"):
+                try:
+                    parsed = json.loads(converted_text)
+                    urgency = int(parsed.get("urgency", parsed.get("importance", 1)))
+                    politeness_val = parsed.get("politeness", 3)
+                    clarity_val = parsed.get("clarity", 3)
+                    specificity_val = parsed.get("specificity", 3)
+                    emotional_val = parsed.get("emotionalStability", 3)
+                    financial_val = parsed.get("financialDemand", 1)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+            avg_metrics = (politeness_val + clarity_val + specificity_val + emotional_val + financial_val) / 5.0
 
             if cid not in buckets:  # 初回の顧客ならバケツを初期化する
                 buckets[cid] = {  # 集計値を初期化する
                     "customerId": cid,  # 返却用のキー（camelCase）を作る
                     "messageCount": 0,  # 件数の初期値を入れる
                     "scoreSum": 0.0,  # 合計スコアの初期値を入れる
+                    "maxUrgency": 1, # 最大緊急度の初期値を入れる
+                    "starsSum": 0.0, # 星の合計の初期値を入れる
                     "lastMessageAt": created_at_raw,  # 最新日時の初期値を入れる
                     "lastMessageAtParsed": self._parse_datetime(created_at_raw),  # 比較用に datetime へ変換する
                 }  # 初期化をここで閉じる
@@ -309,6 +329,8 @@ class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラ�
             bucket = buckets[cid]  # 当該顧客のバケツを参照する
             bucket["messageCount"] = int(bucket["messageCount"]) + 1  # 件数を加算する
             bucket["scoreSum"] = float(bucket["scoreSum"]) + score  # 合計スコアを加算する
+            bucket["maxUrgency"] = max(int(bucket["maxUrgency"]), urgency) # 最大緊急度を更新する
+            bucket["starsSum"] = float(bucket["starsSum"]) + avg_metrics # 星の合計を加算する
 
             current_dt: Optional[datetime] = self._parse_datetime(created_at_raw)  # 今回行の日時をパースする
             last_dt: Optional[datetime] = bucket.get("lastMessageAtParsed")  # 既存の最新日時を取得する
@@ -320,12 +342,17 @@ class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラ�
         for cid, bucket in buckets.items():  # 集計済みバケツを走査する
             count: int = int(bucket["messageCount"])  # 件数を取り出す
             score_sum: float = float(bucket["scoreSum"])  # 合計スコアを取り出す
+            max_urgency: int = int(bucket["maxUrgency"])
+            stars_sum: float = float(bucket["starsSum"])
             avg: float = (score_sum / count) if count > 0 else 0.0  # 平均を計算する（0除算を避ける）
+            avg_stars: float = (stars_sum / count) if count > 0 else 0.0  # 星の平均を計算する
 
             stats.append(  # 返却要素として追加する
                 {  # API 返却のキーに揃える
                     "customerId": cid,  # 顧客IDを入れる
                     "avgAggressionScore": avg,  # 平均スコアを入れる
+                    "maxUrgency": max_urgency,  # 最大緊急度を入れる
+                    "avgStars": avg_stars, # 平均星数を入れる
                     "messageCount": count,  # 件数を入れる
                     "lastMessageAt": bucket.get("lastMessageAt") or None,  # 最終日時を入れる
                 }  # 要素定義をここで閉じる
@@ -383,6 +410,8 @@ class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラ�
                     "customerId": cid,  # 顧客IDを入れる
                     "displayName": display_name,  # 顧客表示名を入れる
                     "avgAggressionScore": float(stat.get("avgAggressionScore") or 0.0),  # 平均スコアを入れる（無ければ 0）
+                    "maxUrgency": int(stat.get("maxUrgency") or 1),  # 最大緊急度を入れる（無ければ 1）
+                    "avgStars": float(stat.get("avgStars") or 0.0), # 平均星数を入れる（無ければ 0）
                     "messageCount": int(stat.get("messageCount") or 0),  # 件数を入れる（無ければ 0）
                     "lastMessageAt": stat.get("lastMessageAt") or None,  # 最終日時を入れる（無ければ None）
                     "createdAt": created_at,  # 顧客作成日時も入れて並び替えや詳細表示に使えるようにする
