@@ -97,6 +97,32 @@ def get_database() -> SupabaseDatabase:  # 依存（SupabaseDatabase）を遅延
             raise HTTPException(status_code=500, detail=f"SupabaseDatabase 初期化に失敗しました: {exc}")  # それ以外は内部エラーとして返す
     return database  # 生成済み（または生成直後）のインスタンスを返す
 
+
+def build_knowledge_context(matches: list[SupabaseDatabase.KnowledgeMatch], max_chars: int) -> str:  # RAG 検索結果をプロンプト用の文章へ整形する
+    """知識検索の結果を Gemini のプロンプトに埋め込める形へ整形する。
+
+    Args:
+        matches: match_knowledge の返却（id/content/similarity）。
+        max_chars: コンテキストの最大文字数。
+
+    Returns:
+        str: プロンプトへ挿入する知識コンテキスト文字列。
+    """
+
+    lines: list[str] = []  # 1件ずつ整形した行を溜める
+    total: int = 0  # 追加済み文字数を追跡して上限で打ち切る
+    for m in matches:  # 類似度の高い順に知識を整形する
+        content: str = str(m.get("content") or "").strip()  # 知識本文を取り出して空白を正規化する
+        if not content:  # 空の知識はプロンプトを汚すだけなので除外する
+            continue  # 次の候補へ進む
+        similarity: float = float(m.get("similarity") or 0.0)  # 類似度を float 化して表示に使う
+        line: str = f"- (similarity={similarity:.3f}) {content}"  # LLM が読みやすい1行に整形する
+        if total + len(line) + 1 > int(max_chars):  # 上限を超える場合は追加をやめる
+            break  # コンテキストの肥大化を防ぐ
+        lines.append(line)  # 1行を追加する
+        total += len(line) + 1  # 改行分も含めて文字数を更新する
+    return "\n".join(lines)  # 行を結合してコンテキスト本文として返す
+
 @api_router.post("/api/convert", response_model=ConvertResponse)  # 変換 API を POST で公開する
 def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッセージを毒抜きし、攻撃性スコアを返す
     """毒抜きと攻撃性スコア算出を同時に行う API。
@@ -122,8 +148,29 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
     except Exception as exc:  # DB 側の失敗を 500 として返す
         raise HTTPException(status_code=500, detail=f"顧客識別に失敗しました: {exc}")  # 失敗理由を返してデバッグ容易性を確保する
 
+    rag_enabled_raw: str = (os.getenv("RAG_ENABLED") or "1").strip().lower()  # RAG の有効/無効を環境変数で切り替えられるようにする
+    rag_enabled: bool = rag_enabled_raw not in ("0", "false", "no")  # 代表的な false 表現を無効扱いに統一する
+    knowledge_context: str | None = None  # RAG の知識コンテキスト（取得できない場合は None）を初期化する
+    if rag_enabled:  # RAG が有効な場合のみ知識検索を試す
+        try:  # RAG の失敗で /api/convert 全体を落とさないため例外を捕捉する
+            threshold_raw: str = (os.getenv("KNOWLEDGE_MATCH_THRESHOLD") or "0.6").strip()  # 類似度閾値を環境変数で調整できるようにする
+            count_raw: str = (os.getenv("KNOWLEDGE_MATCH_COUNT") or "2").strip()  # 取得件数を環境変数で調整できるようにする
+            max_chars_raw: str = (os.getenv("KNOWLEDGE_CONTEXT_MAX_CHARS") or "1200").strip()  # コンテキスト上限を環境変数で調整できるようにする
+            match_threshold: float = float(threshold_raw)  # 閾値を float に変換する
+            match_count: int = int(count_raw)  # 件数を int に変換する
+            max_chars: int = int(max_chars_raw)  # 上限文字数を int に変換する
+            embedding: list[float] = get_engine().embed_text(message)  # 入力文を埋め込みへ変換して検索に使う
+            matches: list[SupabaseDatabase.KnowledgeMatch] = get_database().match_knowledge(  # RPC で知識を検索する
+                query_embedding=embedding,  # 埋め込みベクトルを渡す
+                match_threshold=match_threshold,  # 閾値を渡す
+                match_count=match_count,  # 件数を渡す
+            )  # match_knowledge 呼び出しをここで閉じる
+            knowledge_context = build_knowledge_context(matches=matches, max_chars=max_chars)  # プロンプトに埋め込む文章へ整形する
+        except Exception:  # RAG の失敗はフォールバックするため握って通常生成へ進む
+            knowledge_context = None  # 知識コンテキスト無しとして扱う
+
     try:  # Gemini 呼び出しは外部要因で失敗しうるため例外を捕捉する
-        gemini_output = get_engine().convert(message)  # Gemini に変換を依頼し、結果を受け取る
+        gemini_output = get_engine().convert(message, knowledge_context=knowledge_context)  # 知識コンテキストがあれば注入して変換する
     except HTTPException as exc:  # 既に HTTP として整形済みの例外はそのまま返す
         raise exc  # 503 等の意図したステータスを保持する
     except Exception as exc:  # Gemini 側の失敗を 500 として返す

@@ -1,7 +1,7 @@
 # 毒抜きAIダッシュボード (工務店向け)
 
 工務店向けのカスタマーハラスメント対策AIツール。
-クレーマーの暴言をAIが「毒抜き」し、工務店がわの返信（MVPは定型文）を生成します。
+クレーマーの暴言をAIが「毒抜き」し、工務店側の返信案を生成します（RAG対応）。
 マスコットキャラクターが攻撃性に応じてリアクションすることで、視覚的にも状況を把握できます。
 
 ## 🛠️ 必要要件
@@ -37,6 +37,7 @@ cp backend/.env.example backend/.env
 - `GEMINI_API_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
+- `GEMINI_EMBEDDING_MODEL`（未指定ならデフォルトを使用）
 
 ## 💻 起動手順
 
@@ -46,6 +47,39 @@ cp backend/.env.example backend/.env
 
 ```bash
 npm run dev
+```
+
+## 📚 RAG（知識検索）セットアップ
+
+### 1. Supabase の準備
+
+- `vector` extension を有効化
+- `knowledge` テーブル（`content`, `embedding vector(768)`, `category`）を作成
+- `match_knowledge` RPC を作成
+
+### 2. 知識の投入（knowledge.txt → Supabase）
+
+ルートの `knowledge.txt` を編集し、以下で Supabase の `knowledge` テーブルへ同期します（全削除→入れ直し）。
+
+```bash
+npm run knowledge
+```
+
+書き込みなしで件数とカテゴリ判定だけ確認したい場合は、dry-run を使います。
+
+```bash
+npm run knowledge:dry
+```
+
+### 3. 動作確認（RAGが効いているか）
+
+ローカルで backend を起動して `/api/convert` を叩き、`replySuggestion` が知識（例: 営業時間や対応方針）を反映しているか確認します。
+
+```bash
+npm run dev:backend
+curl -sS -X POST http://localhost:8000/api/convert \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"session_id":"rag-check","message":"営業時間は何時から何時まで？"}'
 ```
 
 ## 📂 ディレクトリ構成
