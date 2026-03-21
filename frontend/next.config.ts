@@ -1,6 +1,22 @@
 import type { NextConfig } from "next";
 
-const distDir = process.env.NEXT_DIST_DIR || ".next";
+const distDir = process.env.NEXT_DIST_DIR || ".next"; // admin/client 同時起動のためにビルド出力先を分けられるようにする
+
+const isProduction = process.env.NODE_ENV === "production"; // Vercel 本番ビルドかどうかを NODE_ENV で判定する
+const isVercelBuild = process.env.VERCEL === "1"; // Vercel 環境では localhost への rewrite が私用ネットワーク扱いになり失敗するため判定する
+const backendUrlFromEnv = (process.env.BACKEND_URL || "").trim(); // 本番環境では Render の Backend URL を環境変数から受け取る
+if (isProduction && isVercelBuild && !backendUrlFromEnv) { // Vercel の本番ビルドで BACKEND_URL 未設定だと /api/* が 404 になるためビルド時に止める
+  throw new Error("BACKEND_URL is required on Vercel production builds."); // 運用ミスを即座に検知できるよう例外で失敗させる
+}
+const backendBaseUrl = isProduction && backendUrlFromEnv ? backendUrlFromEnv : "http://localhost:8000"; // 本番は BACKEND_URL、開発は localhost を使う
+const normalizedBackendBaseUrl = backendBaseUrl.replace(/\/$/, ""); // 末尾スラッシュ有無で URL 結合が壊れないよう正規化する
+console.log( // Vercel のビルドログで rewrites の転送先を確認できるように出力する
+  "[next.config] rewrites backendBaseUrl=%s normalized=%s NODE_ENV=%s BACKEND_URL=%s", // URL の二重スラッシュ等の事故を可視化する
+  backendBaseUrl, // 生の転送先 URL（本番は BACKEND_URL、開発は localhost）を出力する
+  normalizedBackendBaseUrl, // 正規化後 URL（末尾スラッシュ除去）を出力する
+  process.env.NODE_ENV || "", // Vercel 側の NODE_ENV を出力する
+  backendUrlFromEnv || "", // 本番用の BACKEND_URL が入っているかを確認できるように出力する
+); // console.log をここで閉じる
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -18,13 +34,14 @@ const nextConfig: NextConfig = {
     // },
   },
 
-  async rewrites() {
-    return [
+  async rewrites() { // 開発時のみ rewrites を使い、本番は Route Handler のプロキシに任せる
+    if (process.env.NODE_ENV === "production") return []; // Vercel 本番で外部 URL rewrite が private 判定される事故を避ける
+    return [ // 開発時は localhost の FastAPI に転送して同一オリジンで扱う
       {
-        source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
+        source: "/api/:path*", // Next 側の /api/* を捕捉する
+        destination: "http://localhost:8000/api/:path*", // FastAPI の /api/* に転送する
       },
-    ];
+    ]; // rewrites 配列をここで閉じる
   },
 };
 

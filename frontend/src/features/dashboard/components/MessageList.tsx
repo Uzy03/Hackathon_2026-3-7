@@ -32,7 +32,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, sessionId, o
       setLoadError(null); // 前回のエラーをクリアする
 
       try {
-        const response = await fetch(`/api/messages?session_id=${encodeURIComponent(sessionId)}`); // session_id をクエリに含めて履歴を取得する
+        const response = await fetch(`/backend-api/messages?session_id=${encodeURIComponent(sessionId)}`); // session_id をクエリに含めて履歴を取得する
         if (!response.ok) { // HTTP エラーの場合は例外にして catch へ集約する
           throw new Error('Failed to load history'); // 失敗理由をデバッグしやすい文字列で通知する
         } // if ブロックをここで閉じる
