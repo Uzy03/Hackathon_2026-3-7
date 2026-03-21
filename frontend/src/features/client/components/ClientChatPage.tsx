@@ -19,8 +19,8 @@ export const ClientChatPage: React.FC = () => {
     <div className="h-[100dvh] bg-gray-100 font-sans flex flex-col overflow-hidden">
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-red-600">工務店チャット</h1>
-          <p className="text-xs text-gray-400">送信すると工務店（AI）が返信します。</p>
+          <h1 className="text-lg font-bold text-red-600">まもるくんチャット</h1>
+          <p className="text-xs text-gray-400">送信するとまもるくん（AI）が返信します。</p>
         </div>
       </header>
 
