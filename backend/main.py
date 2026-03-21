@@ -3,6 +3,7 @@
 from __future__ import annotations  # 型ヒントの前方参照を容易にする
 
 import os  # 本番/開発で変わる設定値（FRONTEND_URL, PORT）を環境変数から取得する
+import re  # エラーメッセージから機密（API key）をマスクする
 
 from fastapi import APIRouter, FastAPI, HTTPException, Path, Query  # FastAPI 本体とルーティング部品を読み込む
 from fastapi.middleware.cors import CORSMiddleware  # フロントエンド連携のため CORS を設定する
@@ -11,7 +12,7 @@ from typing import Optional  # 遅延初期化のために Optional を使用す
 
 try:  # 実行ディレクトリ差分（repo root / backend）で import 経路が変わるためフォールバックする
     from src.database import SupabaseDatabase  # backend/ を cwd にして起動する場合の import 経路を使う
-    from src.gemini_engine import GeminiEngine  # backend/ を cwd にして起動する場合の import 経路を使う
+    from src.gemini_engine import GeminiApiError, GeminiEngine, GeminiRateLimitError  # backend/ を cwd にして起動する場合の import 経路を使う
     from src.schema import (  # backend/ を cwd にして起動する場合の import 経路を使う
         ConvertRequest,  # convert 入力を表す
         ConvertResponse,  # convert 出力を表す
@@ -23,7 +24,7 @@ try:  # 実行ディレクトリ差分（repo root / backend）で import 経路
     )  # import をここで閉じる
 except ModuleNotFoundError:  # Render 等で repo root を cwd にして起動するケースを想定して代替経路へ切り替える
     from backend.src.database import SupabaseDatabase  # repo root 起動時は backend パッケージ経由で import する
-    from backend.src.gemini_engine import GeminiEngine  # repo root 起動時は backend パッケージ経由で import する
+    from backend.src.gemini_engine import GeminiApiError, GeminiEngine, GeminiRateLimitError  # repo root 起動時は backend パッケージ経由で import する
     from backend.src.schema import (  # repo root 起動時は backend パッケージ経由で import する
         ConvertRequest,  # convert 入力を表す
         ConvertResponse,  # convert 出力を表す
@@ -58,6 +59,12 @@ app.add_middleware(  # CORS 設定をミドルウェアとして追加する
 
 engine: Optional[GeminiEngine] = None  # API キー未設定でも起動できるように遅延初期化する
 database: Optional[SupabaseDatabase] = None  # Supabase 設定未完でも起動できるように遅延初期化する
+
+
+def sanitize_error_detail(detail: str) -> str:  # エラー詳細から API key などの機密をマスクする
+    normalized: str = str(detail or "")  # None を避けて文字列へ正規化する
+    normalized = re.sub(r"key=[^&\\s]+", "key=REDACTED", normalized)  # URL クエリに混入した API key をマスクする
+    return normalized  # マスク済みの文字列を返す
 
 
 def get_engine() -> GeminiEngine:  # 依存（GeminiEngine）を遅延生成して返す
@@ -146,7 +153,7 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
     except HTTPException as exc:  # 既に HTTP として整形済みの例外はそのまま返す
         raise exc  # 503 等の意図したステータスを保持する
     except Exception as exc:  # DB 側の失敗を 500 として返す
-        raise HTTPException(status_code=500, detail=f"顧客識別に失敗しました: {exc}")  # 失敗理由を返してデバッグ容易性を確保する
+        raise HTTPException(status_code=500, detail=sanitize_error_detail(f"顧客識別に失敗しました: {exc}"))  # 失敗理由を返してデバッグ容易性を確保する
 
     rag_enabled_raw: str = (os.getenv("RAG_ENABLED") or "1").strip().lower()  # RAG の有効/無効を環境変数で切り替えられるようにする
     rag_enabled: bool = rag_enabled_raw not in ("0", "false", "no")  # 代表的な false 表現を無効扱いに統一する
@@ -169,12 +176,23 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
         except Exception:  # RAG の失敗はフォールバックするため握って通常生成へ進む
             knowledge_context = None  # 知識コンテキスト無しとして扱う
 
+    converted_text: str = ""  # 返却用の毒抜き文を初期化する
+    reply_suggestion: str = ""  # 返却用の返信案を初期化する
+    aggression_score: float = 0.0  # 返却用の攻撃性スコアを初期化する
+
     try:  # Gemini 呼び出しは外部要因で失敗しうるため例外を捕捉する
         gemini_output = get_engine().convert(message, knowledge_context=knowledge_context)  # 知識コンテキストがあれば注入して変換する
+        converted_text = gemini_output.converted  # 毒抜き文を取り出す
+        reply_suggestion = gemini_output.replySuggestion  # 返信案を取り出す
+        aggression_score = gemini_output.aggressionScore  # 攻撃性スコアを取り出す
     except HTTPException as exc:  # 既に HTTP として整形済みの例外はそのまま返す
         raise exc  # 503 等の意図したステータスを保持する
+    except GeminiRateLimitError:  # レート制限時はフォールバックで機能を継続する
+        converted_text = "ご連絡ありがとうございます。ご不快な思いをさせてしまい申し訳ございません。内容を確認の上、担当より改めてご連絡いたします。"  # 毒抜きの最低限として丁寧な定型文へフォールバックする
+        reply_suggestion = "恐れ入りますが、ただいま混雑しているためすぐに回答を生成できませんでした。お急ぎの場合はお電話等の別手段でご連絡ください。こちらでも確認後に改めてご連絡いたします。"  # 返信案も安全な定型文で返す
+        aggression_score = 0.5  # 推定値として中間を返して UI を破綻させない
     except Exception as exc:  # Gemini 側の失敗を 500 として返す
-        raise HTTPException(status_code=500, detail=f"Gemini 変換に失敗しました: {exc}")  # 失敗理由を返してデバッグ容易性を確保する
+        raise HTTPException(status_code=500, detail=sanitize_error_detail(f"Gemini 変換に失敗しました: {exc}"))  # 失敗理由を返してデバッグ容易性を確保する
 
     import json
     combined_payload = json.dumps({
@@ -193,12 +211,12 @@ def convert_message(request: ConvertRequest) -> ConvertResponse:  # 入力メッ
             customer_id=customer_id,  # 顧客IDを紐づけて保存する
             original=message,  # トータルの保存: クレーマーの生の文章を保存する
             converted=combined_payload,  # JSON化して一つのカラムに押し込む
-            aggression_score=gemini_output.aggressionScore,  # スコアを保存する
+            aggression_score=aggression_score,  # スコアを保存する
         )  # insert_message 呼び出しをここで閉じる
     except HTTPException as exc:  # 既に HTTP として整形済みの例外はそのまま返す
         raise exc  # 503 等の意図したステータスを保持する
     except Exception as exc:  # DB 保存失敗を 500 として返す
-        raise HTTPException(status_code=500, detail=f"メッセージ保存に失敗しました: {exc}")  # 失敗理由を返してデバッグ容易性を確保する
+        raise HTTPException(status_code=500, detail=sanitize_error_detail(f"メッセージ保存に失敗しました: {exc}"))  # 失敗理由を返してデバッグ容易性を確保する
 
     return ConvertResponse(  # API のレスポンススキーマに合わせて整形して返す
         original=message,  # 元の入力をそのまま返す（フロント側で表示に使用）
