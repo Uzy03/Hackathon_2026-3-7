@@ -5,7 +5,7 @@ from __future__ import annotations  # 型ヒントで前方参照を扱いやす
 import os  # 環境変数から Supabase 設定を取得するために使用する
 import re  # Supabase のエラーメッセージから列名を抽出するために使用する
 from datetime import datetime  # created_at の比較に使用する
-from typing import Any, Optional  # 型安全な実装のために使用する
+from typing import Any, Optional, TypedDict  # 型安全な実装のために使用する
 
 from dotenv import load_dotenv  # .env を読み込んでローカル開発を容易にする
 from supabase import Client, create_client  # Supabase クライアント生成に使用する
@@ -14,6 +14,17 @@ from postgrest.exceptions import APIError  # PostgREST 由来の API エラー�
 
 class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラス
     """Supabase を介して customers/messages の読み書きと統計集計を行うクラス。"""
+
+    class KnowledgeMatch(TypedDict):  # match_knowledge RPC の返却を型で固定する
+        id: str  # knowledge.id を表す
+        content: str  # knowledge.content を表す
+        similarity: float  # 類似度（0.0〜1.0）を表す
+
+    class KnowledgeRecord(TypedDict, total=False):
+        id: str
+        content: str
+        category: str
+        embedding: str
 
     def __init__(self) -> None:  # 環境変数を読み取り、Supabase クライアントを初期化する
         """Supabase クライアントを初期化する。"""
@@ -34,6 +45,102 @@ class SupabaseDatabase:  # Supabase との通信を単一責任で担うクラ�
             raise RuntimeError("SUPABASE_ANON_KEY が未設定です。backend/.env を設定してください。")  # 失敗理由を明示する
 
         self._client: Client = create_client(supabase_url, supabase_anon_key)  # Supabase クライアントを生成する
+
+    def match_knowledge(self, query_embedding: list[float], match_threshold: float, match_count: int) -> list[KnowledgeMatch]:  # knowledge をベクトル類似度で検索する
+        """Supabase の match_knowledge RPC を呼び出して関連知識を返す。
+
+        Args:
+            query_embedding: 埋め込みベクトル（vector(768) を想定）。
+            match_threshold: 類似度の閾値（これ未満は除外する）。
+            match_count: 取得件数の上限。
+
+        Returns:
+            list[KnowledgeMatch]: 類似度の高い knowledge の配列。
+        """
+
+        if not query_embedding:  # 空の埋め込みは検索不能なので弾く
+            raise ValueError("query_embedding は必須です。")  # 呼び出し側に入力不正を通知する
+
+        embedding_literal: str = "[" + ",".join(f"{float(v):.8f}" for v in query_embedding) + "]"  # PostgREST 経由で vector を渡せる形へ文字列化する
+        payload: dict[str, Any] = {  # RPC へ渡す引数を辞書で構築する
+            "query_embedding": embedding_literal,  # SQL 側の query_embedding 引数へ渡す
+            "match_threshold": float(match_threshold),  # 閾値は float に正規化して渡す
+            "match_count": int(match_count),  # 件数は int に正規化して渡す
+        }  # payload 定義をここで閉じる
+
+        result = self._client.rpc("match_knowledge", payload).execute()  # RPC を実行して類似検索を行う
+        rows: list[dict[str, Any]] = list(result.data or [])  # None を空配列として扱う
+
+        matches: list[SupabaseDatabase.KnowledgeMatch] = []  # 型付きの返却配列を用意する
+        for row in rows:  # 返却行を走査して型を整える
+            matches.append(  # 1件ずつ整形して追加する
+                {  # TypedDict の形に合わせて返す
+                    "id": str(row.get("id") or ""),  # id を文字列化して入れる
+                    "content": str(row.get("content") or ""),  # content を文字列化して入れる
+                    "similarity": float(row.get("similarity") or 0.0),  # similarity を float 化して入れる
+                }  # 1件分の辞書をここで閉じる
+            )  # append をここで閉じる
+
+        return matches  # 整形済みの配列を返す
+
+    def find_knowledge_id_by_content(self, content: str) -> str | None:
+        normalized: str = content.strip()
+        if not normalized:
+            return None
+        found = (
+            self._client
+            .table("knowledge")
+            .select("id")
+            .eq("content", normalized)
+            .limit(1)
+            .execute()
+        )
+        if found.data and len(found.data) > 0:
+            return str(found.data[0].get("id") or "")
+        return None
+
+    def upsert_knowledge(self, content: str, embedding: list[float] | None, category: str | None) -> str:
+        normalized: str = content.strip()
+        if not normalized:
+            raise ValueError("content は必須です。")
+
+        existing_id = self.find_knowledge_id_by_content(normalized)
+        embedding_literal: str | None = None
+        if embedding is not None:
+            embedding_literal = "[" + ",".join(f"{float(v):.8f}" for v in embedding) + "]"
+
+        payload: dict[str, Any] = {"content": normalized}
+        if category is not None and category.strip():
+            payload["category"] = category.strip()
+        if embedding_literal is not None:
+            payload["embedding"] = embedding_literal
+
+        if existing_id:
+            updated = (
+                self._client
+                .table("knowledge")
+                .update(payload)
+                .eq("id", existing_id)
+                .execute()
+            )
+            if updated.data and len(updated.data) > 0:
+                return str(updated.data[0].get("id") or existing_id)
+            return existing_id
+
+        created = self._client.table("knowledge").insert(payload).execute()
+        if not created.data or len(created.data) == 0:
+            raise RuntimeError("knowledge の作成に失敗しました。")
+        return str(created.data[0].get("id") or "")
+
+    def delete_all_knowledge(self) -> int:
+        result = (
+            self._client
+            .table("knowledge")
+            .delete()
+            .neq("id", "00000000-0000-0000-0000-000000000000")
+            .execute()
+        )
+        return len(list(result.data or []))
 
     def get_or_create_customer_id(self, session_id: str) -> str:  # session_id から顧客 ID を確定する
         """session_id をキーに customers を検索し、存在しなければ作成して id を返す。

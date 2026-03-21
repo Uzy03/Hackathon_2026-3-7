@@ -14,9 +14,11 @@ from pydantic import ValidationError  # Pydanticのバリデーションエラ�
 from .prompts import SYSTEM_PROMPT, FEW_SHOT_EXAMPLES  # backend/src をパッケージとして扱い、起動ディレクトリ差分でも import を安定させる
 
 DEFAULT_MODEL_NAME: str = "models/gemini-flash-latest"  # デフォルトで利用する Flash 系モデル名を定義する
+DEFAULT_EMBEDDING_MODEL_NAME: str = "models/gemini-embedding-001"  # デフォルトで利用する埋め込みモデル名を定義する
 DEFAULT_TIMEOUT_SECONDS: float = 45.0  # Gemini 呼び出しのデフォルトタイムアウト秒を定義する
 MAX_RETRIES: int = 3  # JSONパースやバリデーション失敗時の最大リトライ回数を定義する
 GEMINI_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"  # Gemini Developer API のベースURLを定義する
+DEFAULT_EMBEDDING_DIMENSION: int = 768  # Supabase の vector(768) と整合する埋め込み次元を定義する
 
 
 class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担うクラス
@@ -43,11 +45,12 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
         self._model_name: str = model_name  # 利用モデル名を保持してデバッグや切替に備える
         self._use_system_instruction = False  # REST 呼び出しでは systemInstruction を使わず本文に埋め込む方針とする
 
-    def convert(self, message: str) -> GeminiOutput:  # 入力文から Gemini の JSON 出力を得る
+    def convert(self, message: str, knowledge_context: str | None = None) -> GeminiOutput:  # 入力文から Gemini の JSON 出力を得る
         """入力メッセージを Gemini に渡し、毒抜きと攻撃性スコアを返す。
 
         Args:
             message: クレーマー入力（生テキスト）。
+            knowledge_context: RAG で取得した知識コンテキスト（無い場合は None）。
 
         Returns:
             GeminiOutput: Gemini の出力（converted, aggressionScore）。
@@ -55,7 +58,25 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
 
         prompt: str = message  # system_instruction が使える場合は user content をそのまま渡す
         if not self._use_system_instruction:  # system_instruction を使わない場合は本文に埋め込む
-            prompt = f"{SYSTEM_PROMPT}\n\n{FEW_SHOT_EXAMPLES}\n\n入力テキスト:\n{message}\n\n出力:"  # SYSTEM_PROMPT、FEW_SHOT_EXAMPLES、入力テキストを結合してプロンプトを構築する
+            rag_instruction: str = ""  # 知識注入時の追加指示を初期化する
+            rag_context_block: str = ""  # 知識コンテキストのブロックを初期化する
+            if knowledge_context and knowledge_context.strip():  # 知識がある場合だけ RAG 指示とコンテキストを追加する
+                rag_instruction = (  # 知識を参照して返信案を作るための追加指示を定義する
+                    "\n\n--- RAG RULES ---\n"
+                    "あなたは工務店のスタッフとして返信案（replySuggestion）を作成してください。\n"
+                    "以下の【知識コンテキスト】を参考にしてください。\n"
+                    "知識に無いことは無理に断定せず、「確認が必要」と伝えてください。\n"
+                )  # 指示文字列をここで閉じる
+                rag_context_block = f"\n\n【知識コンテキスト】\n{knowledge_context}\n"  # コンテキストは区切りを付けて混同を避ける
+
+            prompt = (  # SYSTEM_PROMPT、RAG 指示、FEW_SHOT_EXAMPLES、入力テキストを結合してプロンプトを構築する
+                f"{SYSTEM_PROMPT}"
+                f"{rag_instruction}"
+                f"{rag_context_block}\n"
+                f"{FEW_SHOT_EXAMPLES}\n\n"
+                f"入力テキスト:\n{message}\n\n"
+                "出力:"
+            )  # 文字列結合をここで閉じる
 
         timeout_raw: str = os.getenv("GEMINI_TIMEOUT_SECONDS") or ""  # 環境変数でタイムアウト秒を調整できるようにする
         timeout_seconds: float = float(timeout_raw) if timeout_raw.strip() else DEFAULT_TIMEOUT_SECONDS  # 未指定時はデフォルト値を使う
@@ -79,6 +100,64 @@ class GeminiEngine:  # Gemini 呼び出しロジックを単一責任で担う�
         
         # forループを抜け出すことは通常ないが、型の完全性のために配置
         raise RuntimeError("想定外のエラーによりGemini変換に失敗しました。")
+
+    def embed_text(self, text: str) -> list[float]:  # 入力文を埋め込みベクトルへ変換する
+        """文章を Gemini Embeddings でベクトル化して返す。
+
+        Args:
+            text: 埋め込み対象の文章。
+
+        Returns:
+            list[float]: embedding ベクトル（vector(768) を想定）。
+        """
+
+        normalized: str = text.strip()  # 余分な空白を除去して埋め込みの揺れを減らす
+        if not normalized:  # 空文字は埋め込み不能なので弾く
+            raise ValueError("embedding 対象の text は必須です。")  # 呼び出し側に入力不正を通知する
+
+        env_model: str = (os.getenv("GEMINI_EMBEDDING_MODEL") or "").strip()  # 環境変数で埋め込みモデルを差し替えられるようにする
+        model_name: str = env_model if env_model else DEFAULT_EMBEDDING_MODEL_NAME  # 未指定ならデフォルトモデルを使う
+
+        timeout_raw: str = os.getenv("GEMINI_TIMEOUT_SECONDS") or ""  # 既存のタイムアウト設定を埋め込みにも流用できるようにする
+        timeout_seconds: float = float(timeout_raw) if timeout_raw.strip() else DEFAULT_TIMEOUT_SECONDS  # 未指定時はデフォルト値を使う
+
+        url: str = f"{GEMINI_API_BASE_URL}/{model_name}:embedContent"  # embedContent のエンドポイントを組み立てる
+        params: dict[str, str] = {"key": self._api_key}  # API キーはクエリとして付与する（Developer API 仕様）
+        payload: dict[str, Any] = {  # embedContent のリクエストボディを構築する
+            "model": model_name,  # リクエストボディにもモデル名を付与して互換性を高める
+            "content": {  # 埋め込み対象コンテンツを指定する
+                "parts": [{"text": normalized}],  # テキスト本文として normalized を渡す
+            },  # content をここで閉じる
+            "output_dimensionality": DEFAULT_EMBEDDING_DIMENSION,  # Supabase の vector(768) と整合する次元で出力させる
+        }  # payload 定義をここで閉じる
+
+        response = requests.post(  # HTTP POST で Gemini Embeddings を呼び出す
+            url,  # エンドポイント URL を指定する
+            params=params,  # API キーのクエリを付与する
+            json=payload,  # JSON ボディを送信する
+            timeout=timeout_seconds,  # 応答待ちの上限秒数を指定してハングを防ぐ
+        )  # リクエスト呼び出しをここで閉じる
+
+        response.raise_for_status()  # 4xx/5xx を例外化して呼び出し側で扱えるようにする
+
+        data: dict[str, Any] = response.json()  # 応答 JSON を辞書として取得する
+        embedding_obj: dict[str, Any] = {}  # 単一/複数の両形式に対応して embedding オブジェクトを取り出す
+        if isinstance(data.get("embedding"), dict):  # 単一 embedding 形式の場合
+            embedding_obj = dict(data.get("embedding") or {})  # embedding オブジェクトを取り出す
+        elif isinstance(data.get("embeddings"), list) and len(data.get("embeddings") or []) > 0:  # 複数 embeddings 形式の場合
+            first = (data.get("embeddings") or [])[0]  # 先頭の embedding を取り出す
+            if isinstance(first, dict):  # dict 形式の場合のみ採用する
+                embedding_obj = dict(first)  # 先頭を embedding オブジェクトとして扱う
+
+        values_raw: Any = embedding_obj.get("values")  # values 配列を取り出す
+        if not isinstance(values_raw, list) or len(values_raw) == 0:  # 埋め込み配列が無い場合は異常とする
+            raise RuntimeError("Gemini Embedding 応答に values がありません。")  # 失敗理由を明示する
+
+        values: list[float] = [float(v) for v in values_raw]  # float 配列へ正規化して返す
+        if len(values) != DEFAULT_EMBEDDING_DIMENSION:  # 想定次元と異なる場合は DB 側が受け付けないため弾く
+            raise RuntimeError(f"Embedding 次元が不正です: {len(values)}（想定 {DEFAULT_EMBEDDING_DIMENSION}）")  # 失敗理由を明示する
+
+        return values  # 埋め込みベクトルを返す
 
     def _generate_json_text(self, prompt: str, timeout_seconds: float) -> str:  # Gemini REST API で JSON 文字列を取得する
         """Gemini REST API を呼び出し、応答テキスト（JSON 文字列）を返す。
