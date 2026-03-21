@@ -1,4 +1,5 @@
 import React from 'react'; // 画面コンポーネントを定義するために React を読み込む
+import Link from 'next/link'; // ルートへ戻る導線を作るために Link を使う
 import { MascotDisplay } from '../../mascot/components/MascotDisplay'; // マスコット表示を再利用する
 import { ClientChatComposer } from './ClientChatComposer'; // チャット入力欄を読み込む
 import { ClientChatTimeline } from './ClientChatTimeline'; // チャット一覧を読み込む
@@ -22,6 +23,9 @@ export const ClientChatPage: React.FC = () => {
           <h1 className="text-lg font-bold text-red-600">まもるくんチャット</h1>
           <p className="text-xs text-gray-400">送信するとまもるくん（AI）が返信します。</p>
         </div>
+        <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+          画面選択へ
+        </Link>
       </header>
 
       <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-10">
