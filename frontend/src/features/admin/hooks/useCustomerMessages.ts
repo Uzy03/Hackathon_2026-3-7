@@ -32,7 +32,7 @@ export const useCustomerMessages = (customerId: string | null): UseCustomerMessa
       setError(null); // 前回のエラーをクリアする
 
       try {
-        const response = await fetch(`/api/customers/${encodeURIComponent(customerId)}/messages`, { signal: controller.signal }); // 顧客IDで履歴を取得する
+        const response = await fetch(`/backend-api/customers/${encodeURIComponent(customerId)}/messages`, { signal: controller.signal }); // 顧客IDで履歴を取得する
         if (!response.ok) throw new Error('Failed to load customer messages'); // HTTP エラーは例外にして catch へ集約する
 
         const data = (await response.json()) as CustomerMessageRecord[]; // JSON を型付き配列として受け取る

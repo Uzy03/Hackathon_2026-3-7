@@ -9,9 +9,9 @@ from typing import Any, Optional  # 型安全な実装のために使用する
 from dotenv import load_dotenv  # .env から環境変数を読み込む
 import requests  # Gemini REST API をタイムアウト付きで呼び出すために使用する
 
-from src.schema import GeminiOutput  # Gemini の JSON 出力を厳密に検証するために使用する
+from .schema import GeminiOutput  # backend/src をパッケージとして扱い、起動ディレクトリ差分でも import を安定させる
 from pydantic import ValidationError  # Pydanticのバリデーションエラーを捕捉するために使用する
-from src.prompts import SYSTEM_PROMPT, FEW_SHOT_EXAMPLES  # 分離されたプロンプト定義をインポートする
+from .prompts import SYSTEM_PROMPT, FEW_SHOT_EXAMPLES  # backend/src をパッケージとして扱い、起動ディレクトリ差分でも import を安定させる
 
 DEFAULT_MODEL_NAME: str = "models/gemini-flash-latest"  # デフォルトで利用する Flash 系モデル名を定義する
 DEFAULT_TIMEOUT_SECONDS: float = 45.0  # Gemini 呼び出しのデフォルトタイムアウト秒を定義する
