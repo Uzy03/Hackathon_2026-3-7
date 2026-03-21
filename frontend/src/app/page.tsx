@@ -17,8 +17,8 @@ export default function Home() {
           href="/client"
           className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow"
         >
-          <h2 className="text-xl font-bold text-red-600 mb-1">工務店チャット</h2>
-          <p className="text-gray-500 text-sm">入力して送信すると工務店（AI）が返信します。</p>
+          <h2 className="text-xl font-bold text-red-600 mb-1">まもるくんチャット</h2>
+          <p className="text-gray-500 text-sm">入力して送信するとまもるくん（AI）が返信します。</p>
         </Link>
 
         <Link
