@@ -8,8 +8,22 @@ export const cookieOptions = {
   sameSite: 'lax' as const, path: '/',
 };
 export const serviceEnabled = () => process.env.APP_ENABLED === 'true';
-export const sameOrigin = (request: NextRequest) =>
-  request.headers.get('origin') === request.nextUrl.origin;
+export function sameOrigin(request: NextRequest) {
+  const origin = request.headers.get('origin');
+  if (!origin) return false;
+  try {
+    // Production deployments must configure their externally visible origin.
+    const configured = process.env.FRONTEND_URL;
+    if (process.env.NODE_ENV === 'production') {
+      if (!configured) return false;
+      const expected = new URL(configured);
+      return expected.protocol === 'https:' && origin === expected.origin;
+    }
+    // Next dev may canonicalize nextUrl to localhost even when using 127.0.0.1.
+    const host = request.headers.get('host');
+    return Boolean(host) && origin === new URL(`${request.nextUrl.protocol}//${host}`).origin;
+  } catch { return false; }
+}
 
 export function authClient() {
   const url = process.env.SUPABASE_URL;

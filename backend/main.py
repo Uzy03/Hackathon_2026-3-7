@@ -5,7 +5,7 @@ from __future__ import annotations  # 型ヒントの前方参照を容易にす
 import os  # 本番/開発で変わる設定値（FRONTEND_URL, PORT）を環境変数から取得する
 import re  # エラーメッセージから機密（API key）をマスクする
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query  # FastAPI 本体とルーティング部品を読み込む
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path  # FastAPI 本体とルーティング部品を読み込む
 from fastapi.middleware.cors import CORSMiddleware  # フロントエンド連携のため CORS を設定する
 
 from typing import Optional  # 遅延初期化のために Optional を使用する
@@ -16,6 +16,7 @@ try:  # 実行ディレクトリ差分（repo root / backend）で import 経路
     from src.gemini_engine import GeminiApiError, GeminiEngine, GeminiRateLimitError  # backend/ を cwd にして起動する場合の import 経路を使う
     from src.schema import (  # backend/ を cwd にして起動する場合の import 経路を使う
         ConvertRequest,  # convert 入力を表す
+        GeminiOutput,
         ConvertResponse,  # convert 出力を表す
         CustomerListItem,  # 顧客一覧の返却を表す
         CustomerRecord,  # 顧客レコードの返却を表す
@@ -29,6 +30,7 @@ except ModuleNotFoundError:  # Render 等で repo root を cwd にして起動�
     from backend.src.gemini_engine import GeminiApiError, GeminiEngine, GeminiRateLimitError  # repo root 起動時は backend パッケージ経由で import する
     from backend.src.schema import (  # repo root 起動時は backend パッケージ経由で import する
         ConvertRequest,  # convert 入力を表す
+        GeminiOutput,
         ConvertResponse,  # convert 出力を表す
         CustomerListItem,  # 顧客一覧の返却を表す
         CustomerRecord,  # 顧客レコードの返却を表す
@@ -65,7 +67,8 @@ database: Optional[SupabaseDatabase] = None  # Supabase 設定未完でも起動
 
 def sanitize_error_detail(detail: str) -> str:  # エラー詳細から API key などの機密をマスクする
     normalized: str = str(detail or "")  # None を避けて文字列へ正規化する
-    normalized = re.sub(r"key=[^&\\s]+", "key=REDACTED", normalized)  # URL クエリに混入した API key をマスクする
+    normalized = re.sub(r"key=[^&\s]+", "key=REDACTED", normalized)  # URL クエリに混入した API key をマスクする
+    normalized = re.sub(r"AIza[0-9A-Za-z_-]{35}", "REDACTED", normalized)
     return normalized  # マスク済みの文字列を返す
 
 
@@ -143,7 +146,7 @@ def convert_message(request: ConvertRequest, user=Depends(limit_conversion)) -> 
         ConvertResponse: original/converted/aggressionScore を含むレスポンス。
     """
 
-    session_id: str = user.id  # session_id の前後空白を除去して顧客識別の揺れを防ぐ
+    session_id: str = user.id  # リクエストのIDではなく、認証済み本人のIDを使う
     message: str = request.message.strip()  # 前後の空白を除去して入力を正規化する
     if not message:  # 空文字の場合は Gemini 呼び出しを行わない
         raise HTTPException(status_code=400, detail="message は必須です。")  # 400 を返してフロント側に明示する
@@ -193,6 +196,11 @@ def convert_message(request: ConvertRequest, user=Depends(limit_conversion)) -> 
         converted_text = "ご連絡ありがとうございます。ご不快な思いをさせてしまい申し訳ございません。内容を確認の上、担当より改めてご連絡いたします。"  # 毒抜きの最低限として丁寧な定型文へフォールバックする
         reply_suggestion = "恐れ入りますが、ただいま混雑しているためすぐに回答を生成できませんでした。お急ぎの場合はお電話等の別手段でご連絡ください。こちらでも確認後に改めてご連絡いたします。"  # 返信案も安全な定型文で返す
         aggression_score = 0.5  # 推定値として中間を返して UI を破綻させない
+        gemini_output = GeminiOutput(
+            converted=converted_text, replySuggestion=reply_suggestion,
+            aggressionScore=aggression_score, urgency=1, politeness=3,
+            clarity=3, specificity=3, emotionalStability=3, financialDemand=1,
+        )
     except Exception as exc:  # Gemini 側の失敗を 500 として返す
         raise HTTPException(status_code=500, detail=sanitize_error_detail(f"Gemini 変換に失敗しました: {exc}"))  # 失敗理由を返してデバッグ容易性を確保する
 

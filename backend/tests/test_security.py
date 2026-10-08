@@ -108,3 +108,23 @@ def test_oversized_input_is_rejected_before_generation(client):
     assert http.post('/api/convert', headers={'Authorization': 'Bearer customer-token'},
                      json={'message': 'x' * 4001}).status_code == 422
     assert not db.mock_calls
+
+
+def test_error_redaction_removes_entire_key_including_lowercase_s():
+    key = 'AIza' + 'A' * 17 + 's' + 'B' * 17
+    detail = main.sanitize_error_detail('request failed?key=' + key + '&next=value')
+    assert key not in detail
+    assert 'BBBB' not in detail
+    assert '&next=value' in detail
+    assert key not in main.sanitize_error_detail('API credential: ' + key)
+
+
+def test_gemini_rate_limit_fallback_remains_available(client, monkeypatch):
+    http, db = client
+    engine = Mock()
+    engine.convert.side_effect = main.GeminiRateLimitError('quota exhausted')
+    monkeypatch.setattr(main, 'engine', engine)
+    response = http.post('/api/convert', headers={'Authorization': 'Bearer customer-token'}, json={'message': 'hello'})
+    assert response.status_code == 200
+    assert response.json()['aggressionScore'] == 0.5
+    db.insert_message.assert_called_once()
