@@ -7,14 +7,15 @@ class ConvertRequest(BaseModel):  # /api/convert の入力スキーマを表す
     """/api/convert のリクエストボディ（入力）を表すモデル。"""
 
     session_id: str = Field(  # 顧客識別のためのセッションIDを保持する
-        ...,  # 必須項目であることを示す
-        description="ブラウザ単位のセッションID（顧客識別用）",  # API ドキュメント用の説明を付与する
-        min_length=1,  # 空文字を弾いて顧客識別の破綻を防ぐ
+        "",  # 旧クライアント互換。所有者は認証済みユーザーIDから決定する
+        description="旧クライアント用。認可や顧客識別には使用しない",  # API ドキュメント用の説明を付与する
+        max_length=128,
     )  # フィールド定義をここで閉じる
     message: str = Field(  # クレーマーの入力テキストを保持する
         ...,  # 必須項目であることを示す
         description="クレーマー入力（生テキスト）",  # API ドキュメント用の説明を付与する
-        min_length=1,  # 空文字を弾くことで無駄な LLM 呼び出しを防ぐ
+        min_length=1,
+        max_length=4000,  # 生成APIへの過大な入力を拒否する
     )  # フィールド定義をここで閉じる
 
 

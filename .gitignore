@@ -24,8 +24,9 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env*.local
-.env
+.env*
+!.env.example
+!**/.env.example
 
 # python
 __pycache__/
@@ -42,3 +43,4 @@ _docs/private
 
 # プレゼン
 プレゼン/
+.next-*/
