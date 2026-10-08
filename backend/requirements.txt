@@ -1,7 +1,6 @@
-fastapi # FastAPI 本体（API サーバー）
-uvicorn # ASGI サーバー（開発/本番の起動）
-google-generativeai # Gemini API クライアント
-python-dotenv # .env から環境変数を読み込む
-pydantic # 入出力スキーマ定義とバリデーション
-supabase # Supabase（PostgREST）へのアクセス SDK
-requests # Gemini REST API を HTTP タイムアウト付きで呼び出す
+fastapi==0.142.4
+uvicorn==0.54.0
+python-dotenv==1.2.4
+pydantic==2.13.5
+supabase==2.32.0
+requests==2.34.2

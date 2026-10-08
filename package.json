@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "毒抜きAIダッシュボード - クレーマーの暴言を穏やかなメッセージに変換するシステム",
   "scripts": {
-    "postinstall": "cd frontend && npm install",
+    "postinstall": "npm ci --prefix frontend",
     "dev": "concurrently --kill-others --prefix-colors \"magenta,blue,cyan\" \"npm run dev:frontend:admin\" \"npm run dev:frontend:client\" \"npm run dev:backend\"",
     "dev:client": "concurrently --kill-others --prefix-colors \"magenta,blue\" \"npm run dev:frontend:client\" \"npm run dev:backend\"",
     "dev:admin": "concurrently --kill-others --prefix-colors \"magenta,blue\" \"npm run dev:frontend:admin\" \"npm run dev:backend\"",
@@ -19,7 +19,10 @@
     "predev": "lsof -ti :3000 | xargs kill -9 || true && lsof -ti :3001 | xargs kill -9 || true && lsof -ti :8000 | xargs kill -9 || true"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "tree-kill": "^1.2.2"
+    "concurrently": "10.0.5",
+    "tree-kill": "1.2.2"
+  },
+  "overrides": {
+    "shell-quote": "1.12.0"
   }
 }
