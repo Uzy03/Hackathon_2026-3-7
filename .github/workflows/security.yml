@@ -15,7 +15,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - run: python3 tools/check_secrets.py
+          fetch-depth: 0
+      - run: python3 tools/check_secrets.py --history
+      - run: python3 tools/test_secret_scan.py
   backend-security:
     runs-on: ubuntu-latest
     steps:

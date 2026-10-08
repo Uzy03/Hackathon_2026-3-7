@@ -43,7 +43,8 @@ GitHub側のキャッシュ削除は必要に応じてSupportへ相談します�
 ## 再発防止
 
 - `.env.example`以外の`.env*`をGit管理対象から除外する。
-- CIで追跡中ファイルの代表的なキー形式・秘密鍵・環境ファイルを検査する。
+- CIで追跡中ファイルとHEADから到達するコミット履歴の代表的なキー形式・秘密鍵を検査し、
+  `.env.example`以外の環境ファイルの追跡を拒否する。
   この簡易検査は全種類のシークレットを検出するものではない。
 - GitHubのPush protectionを有効にし、Gitleaks等の全履歴検査も併用する。
 - `develop`はPR経由にし、`secret-scan`、`backend-security`、`frontend-security`を必須にする。
